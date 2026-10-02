@@ -163,6 +163,45 @@ class Storage:
             return max(keys)
         return None
 
+    def latest_gap_end(self, source: str, feed: str) -> datetime | None:
+        """The max ``gap_end`` among stored ``gaps`` rows for ``feed``, or ``None``.
+
+        Only the newest one or two ``date=`` partitions (keyed by
+        ``gap_start``'s date) are scanned, mirroring ``latest_snapshot``'s
+        bound on restart cost; a gap's ``gap_end`` can fall on the
+        following UTC day, which is why two partitions are read instead of
+        one.
+        """
+        dataset_dir = self._dataset_dir(source, "gaps")
+        if not dataset_dir.is_dir():
+            return None
+
+        partition_dirs = sorted(
+            (p for p in dataset_dir.iterdir() if p.is_dir() and p.name.startswith("date=")),
+            reverse=True,
+        )
+
+        best: datetime | None = None
+        scanned = 0
+        for partition_dir in partition_dirs:
+            part_files = sorted(partition_dir.glob(_PART_GLOB))
+            if not part_files:
+                continue
+            for path in part_files:
+                table = pq.read_table(path, columns=["feed", "gap_end"])
+                for row_feed, gap_end in zip(
+                    table.column("feed").to_pylist(), table.column("gap_end").to_pylist()
+                ):
+                    if row_feed != feed:
+                        continue
+                    gap_end = _as_utc(gap_end)
+                    if best is None or gap_end > best:
+                        best = gap_end
+            scanned += 1
+            if scanned >= 2:
+                break
+        return best
+
     def write(self, dataset: str, source: str, table: pa.Table) -> Path:
         """Write ``table`` as one new, finished Parquet file.
 
