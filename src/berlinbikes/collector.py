@@ -82,9 +82,14 @@ class Collector:
         self.clock = clock
         self._last_written: dict[str, datetime] = {}
         self._retry_at: dict[str, datetime] = {}
-        #: gap_start of the current run of consecutive failures for a feed.
+        #: gap_start of the current open outage for a feed (a run of
+        #: consecutive failures, or downtime discovered on resume).
         self._outage_start: dict[str, datetime] = {}
         self._outage_attempts: dict[str, int] = {}
+        #: gaps.reason the open outage will be written with: "fetch_error"
+        #: for one opened by a failed poll, "collector_down" for one opened
+        #: by _resume() finding a stale-on-disk snapshot.
+        self._outage_reason: dict[str, str] = {}
         #: last_written value a stale_feed row was already recorded for.
         self._stale_gap_written: dict[str, datetime] = {}
         self._resumed = False
@@ -147,6 +152,14 @@ class Collector:
         snapshot's Europe/Berlin calendar date is today's is not re-fetched
         until the next Berlin midnight; "today" is judged by the stored
         snapshot_ts (the feed's last_updated), not fetched_at.
+
+        For a feed polled every ``FEED_INTERVALS_S[feed_name]`` seconds, a
+        gap between the stored snapshot and now longer than twice that
+        interval means the process itself was down for that stretch (not
+        just a quick restart), so a ``collector_down`` outage is opened,
+        clamped to start no earlier than the latest gap already recorded
+        for that feed so it can never collide with a gap an earlier process
+        already wrote at the stored snapshot's timestamp.
         """
         now = self.clock.now()
         for feed_name in self.source.feeds:
@@ -154,9 +167,18 @@ class Collector:
             if stored is None:
                 continue
             self._last_written[feed_name] = stored
-            if FEED_INTERVALS_S[feed_name] == DAILY_INTERVAL_S:
+            interval = FEED_INTERVALS_S[feed_name]
+            if interval == DAILY_INTERVAL_S:
                 if stored.astimezone(BERLIN_TZ).date() == now.astimezone(BERLIN_TZ).date():
                     self._retry_at[feed_name] = _next_berlin_midnight_utc(now)
+                continue
+            if (now - stored).total_seconds() > 2 * interval:
+                start = stored
+                latest_gap_end = self.storage.latest_gap_end(self.source.name, feed_name)
+                if latest_gap_end is not None and latest_gap_end > start:
+                    start = latest_gap_end
+                self._outage_start[feed_name] = start
+                self._outage_reason[feed_name] = "collector_down"
 
     def _set_retry(self, feed_name: str) -> None:
         floor = min(FEED_INTERVALS_S[feed_name], MAX_RETRY_FLOOR_S)
@@ -167,27 +189,40 @@ class Collector:
         self._retry_at[feed_name] = self.clock.now() + timedelta(seconds=delay)
 
     def _handle_poll_failure(self, feed_name: str) -> None:
-        attempts = self._outage_attempts.get(feed_name, 0)
-        if attempts == 0:
+        if self._outage_start.get(feed_name) is None:
             start = self._last_written.get(feed_name) or self.clock.now()
             # Avoid colliding with a stale_feed row already written at this
             # key: start the outage at the first failed attempt instead.
             if self._stale_gap_written.get(feed_name) == start:
                 start = self.clock.now()
             self._outage_start[feed_name] = start
+            self._outage_reason[feed_name] = "fetch_error"
             logger.warning("feed outage starting feed=%s", feed_name)
-        self._outage_attempts[feed_name] = attempts + 1
+        # A failure during an already-open outage (including a
+        # collector_down one opened by _resume()) just adds an attempt
+        # instead of opening a second row.
+        self._outage_attempts[feed_name] = self._outage_attempts.get(feed_name, 0) + 1
         self._set_retry(feed_name)
 
     def _handle_poll_success(self, feed_name: str) -> None:
-        attempts = self._outage_attempts.pop(feed_name, 0)
-        outage_start = self._outage_start.pop(feed_name, None)
+        outage_start = self._outage_start.get(feed_name)
         if outage_start is not None:
-            gap_end = self._last_written.get(feed_name)
-            if gap_end is not None and gap_end > outage_start:
-                self._write_gap(feed_name, outage_start, gap_end, "fetch_error", attempts)
+            reason = self._outage_reason.get(feed_name, "fetch_error")
+            last_written = self._last_written.get(feed_name)
+            closes = last_written is not None and last_written > outage_start
+            if reason == "collector_down" and not closes:
+                # A resumed outage stays open until the feed produces a
+                # genuinely new snapshot, so a poll that merely succeeds
+                # while the feed is itself still stale can't make the
+                # downtime vanish. It is flushed at shutdown otherwise.
+                return
+            attempts = self._outage_attempts.pop(feed_name, 0)
+            self._outage_reason.pop(feed_name, None)
+            self._outage_start.pop(feed_name, None)
+            if closes:
+                self._write_gap(feed_name, outage_start, last_written, reason, attempts)
             else:
-                logger.info("skipping zero-length fetch_error gap feed=%s", feed_name)
+                logger.info("skipping zero-length %s gap feed=%s", reason, feed_name)
         self._check_stale(feed_name)
 
     def _check_stale(self, feed_name: str) -> None:
@@ -198,19 +233,31 @@ class Collector:
             return
         threshold = STALE_FACTOR * FEED_INTERVALS_S[feed_name]
         now = self.clock.now()
-        if (now - last_ts).total_seconds() > threshold:
-            self._write_gap(feed_name, last_ts, now, "stale_feed", attempts=0)
-            self._stale_gap_written[feed_name] = last_ts
+        if (now - last_ts).total_seconds() <= threshold:
+            return
+        # Avoid colliding with a gap an earlier process already wrote
+        # ending at or after last_ts (for example a stale_feed row from
+        # before a restart): start no earlier than that.
+        start = last_ts
+        latest_gap_end = self.storage.latest_gap_end(self.source.name, feed_name)
+        if latest_gap_end is not None and latest_gap_end > start:
+            start = latest_gap_end
+        self._stale_gap_written[feed_name] = last_ts
+        if now > start:
+            self._write_gap(feed_name, start, now, "stale_feed", attempts=0)
+        else:
+            logger.info("skipping zero-length stale_feed gap feed=%s", feed_name)
 
     def _flush_open_outages(self) -> None:
         now = self.clock.now()
         for feed_name in list(self._outage_start):
             outage_start = self._outage_start.pop(feed_name)
             attempts = self._outage_attempts.pop(feed_name, 0)
+            reason = self._outage_reason.pop(feed_name, "fetch_error")
             if now > outage_start:
-                self._write_gap(feed_name, outage_start, now, "fetch_error", attempts)
+                self._write_gap(feed_name, outage_start, now, reason, attempts)
             else:
-                logger.info("skipping zero-length fetch_error gap at shutdown feed=%s", feed_name)
+                logger.info("skipping zero-length %s gap at shutdown feed=%s", reason, feed_name)
 
     def _write_gap(
         self, feed_name: str, gap_start: datetime, gap_end: datetime, reason: str, attempts: int
