@@ -1,9 +1,9 @@
-"""Offline shape checks for the recorded nextbike_bn GBFS fixtures.
+"""Offline shape checks for the recorded GBFS fixtures.
 
-These fixtures are recorded once from the live feed by
+These fixtures are recorded once from the live feeds by
 ``scripts/record_gbfs_fixtures.py`` (a manual tool; pytest never imports or
 runs it). These tests only replay the files already committed under
-``tests/fixtures/gbfs/nextbike_bn/``.
+``tests/fixtures/gbfs/<system>/``.
 """
 
 import json
@@ -12,53 +12,70 @@ from pathlib import Path
 
 import pytest
 
-FIXTURE_DIR = Path(__file__).parent / "fixtures" / "gbfs" / "nextbike_bn"
+FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "gbfs"
 
-REQUIRED_FEED_FILES = [
-    "gbfs.json",
-    "station_information.json",
-    "station_status.json",
-    "free_bike_status.json",
-    "vehicle_types.json",
-]
+REQUIRED_FEED_FILES = {
+    "nextbike_bn": [
+        "gbfs.json",
+        "station_information.json",
+        "station_status.json",
+        "free_bike_status.json",
+        "vehicle_types.json",
+    ],
+    "dott_berlin": [
+        "gbfs.json",
+        "station_information.json",
+        "station_status.json",
+        "free_bike_status.json",
+        "vehicle_types.json",
+    ],
+}
+SYSTEMS = sorted(REQUIRED_FEED_FILES)
 
 _TRAILING_DIGITS = re.compile(r"\d+(?!.*\d)")
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
-def _load(filename: str) -> dict:
-    return json.loads((FIXTURE_DIR / filename).read_text())
+def _load(system: str, filename: str) -> dict:
+    return json.loads((FIXTURE_ROOT / system / filename).read_text())
 
 
-@pytest.mark.parametrize("filename", REQUIRED_FEED_FILES)
-def test_feed_file_is_present_and_nonempty(filename):
-    path = FIXTURE_DIR / filename
+def _feed_file_params():
+    return [(system, filename) for system in SYSTEMS for filename in REQUIRED_FEED_FILES[system]]
+
+
+@pytest.mark.parametrize("system,filename", _feed_file_params())
+def test_feed_file_is_present_and_nonempty(system, filename):
+    path = FIXTURE_ROOT / system / filename
     assert path.is_file()
     assert path.stat().st_size > 0
 
 
-@pytest.mark.parametrize("filename", REQUIRED_FEED_FILES)
-def test_feed_file_has_gbfs_envelope(filename):
-    data = _load(filename)
+@pytest.mark.parametrize("system,filename", _feed_file_params())
+def test_feed_file_has_gbfs_envelope(system, filename):
+    data = _load(system, filename)
     assert "last_updated" in data
     assert "ttl" in data
     assert "data" in data
     assert data["data"]
 
 
-def test_station_information_has_stations():
-    data = _load("station_information.json")
+@pytest.mark.parametrize("system", SYSTEMS)
+def test_station_information_has_stations(system):
+    data = _load(system, "station_information.json")
     assert data["data"]["stations"]
 
 
-def test_free_bike_status_bike_ids_are_pseudonymised():
-    data = _load("free_bike_status.json")
+@pytest.mark.parametrize("system", SYSTEMS)
+def test_free_bike_status_bike_ids_are_pseudonymised(system):
+    data = _load(system, "free_bike_status.json")
     bikes = data["data"]["bikes"]
     assert bikes
     for bike in bikes:
         assert bike["bike_id"].startswith("fixture-")
 
 
-def test_free_bike_status_rental_uris_carry_no_real_per_bike_id():
+def test_nextbike_free_bike_status_rental_uris_carry_no_real_per_bike_id():
     """Charter non-goal: no per-bike identifier may reach disk.
 
     A bike's rental_uris embed a numeric place id. For bikes docked at a
@@ -67,7 +84,7 @@ def test_free_bike_status_rental_uris_carry_no_real_per_bike_id():
     per-bike nextbike identifier, so it must have been rewritten to the
     bike's own synthetic suffix.
     """
-    data = _load("free_bike_status.json")
+    data = _load("nextbike_bn", "free_bike_status.json")
     bikes = data["data"]["bikes"]
     checked_free_floating = 0
     for bike in bikes:
@@ -90,3 +107,26 @@ def test_free_bike_status_rental_uris_carry_no_real_per_bike_id():
                     f"a real per-bike id: {uri!r}"
                 )
     assert checked_free_floating > 0
+
+
+def test_dott_free_bike_status_rental_uris_carry_no_real_bike_id():
+    """Charter non-goal: no per-bike identifier may reach disk.
+
+    Dott embeds the real bike_id UUID directly in rental_uris, so once
+    scrubbed no UUID should remain there at all, only the synthetic id.
+    """
+    data = _load("dott_berlin", "free_bike_status.json")
+    bikes = data["data"]["bikes"]
+    checked = 0
+    for bike in bikes:
+        rental_uris = bike.get("rental_uris") or {}
+        for uri in rental_uris.values():
+            checked += 1
+            assert not _UUID.search(uri), f"rental_uris still carries a real bike_id UUID: {uri!r}"
+            assert bike["bike_id"] in uri, f"rental_uris lost the pseudonymised id: {uri!r}"
+    assert checked > 0
+
+
+def test_dott_free_bike_status_is_trimmed_to_600():
+    data = _load("dott_berlin", "free_bike_status.json")
+    assert len(data["data"]["bikes"]) <= 600

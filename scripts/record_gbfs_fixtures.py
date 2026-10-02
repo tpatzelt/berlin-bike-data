@@ -1,40 +1,87 @@
 #!/usr/bin/env python3
-"""Manual tool: records the nextbike_bn GBFS 2.3 fixtures from the live feed.
+"""Manual tool: records GBFS fixtures from the live feeds below.
 
 Not imported or run by pytest. Run this script by hand (from a sandbox that
-is allowed to reach gbfs.nextbike.net) to (re)populate
-``tests/fixtures/gbfs/nextbike_bn/*.json``. It makes a handful of one-shot
-GET requests: ``gbfs.json``, then every feed it lists for LOCALE (plus
-``system_information`` if present), with no retries and no loop.
+is allowed to reach the chosen system's host) with ``--system
+{nextbike_bn,dott_berlin}`` to (re)populate ``tests/fixtures/gbfs/<system>/*.json``.
+It makes a handful of one-shot GET requests: ``gbfs.json``, then every feed
+it lists for the system's locale, with no retries and no loop. There is no
+default system: the operator must say which one to hit, so a bare invocation
+never re-fetches a source that is not part of the current task.
 
 Charter non-goal: ``bike_id`` must never be written to disk. Before saving
 ``free_bike_status.json`` this script replaces every ``bike_id`` with a
-synthetic ``fixture-NNNN`` value. For bikes that are not docked at a station
-(no ``station_id``), ``rental_uris`` also carries a real per-bike nextbike
-place id embedded in the URL, so that numeric id is rewritten to the same
-NNNN as well. Bikes docked at a station keep their rental_uris unchanged,
-because that id is the station's public id, already present in
-station_information.
+synthetic ``fixture-NNNN`` value.
+
+For nextbike, bikes that are not docked at a station (no ``station_id``)
+also carry a real per-bike nextbike place id embedded in ``rental_uris``
+(the trailing digits of the URL), so that id is rewritten to the same NNNN.
+Docked bikes keep their rental_uris unchanged, because that id is the
+station's own public id, already present in station_information.
+
+For Dott, ``rental_uris`` embeds the real ``bike_id`` UUID directly in the
+URL path, so the scrub is a literal substring replace of the real UUID with
+the synthetic id.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "gbfs" / "nextbike_bn"
+FIXTURE_ROOT = REPO_ROOT / "tests" / "fixtures" / "gbfs"
 ENV_EXAMPLE = REPO_ROOT / "deploy" / ".bikes.env.example"
 
-GBFS_ROOT_URL = "https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_bn/gbfs.json"
-LOCALE = "de"
-REQUIRED_FEEDS = ("station_information", "station_status", "free_bike_status", "vehicle_types")
-OPTIONAL_FEEDS = ("system_information",)
+MAX_FREE_BIKES = 600
 
 _TRAILING_DIGITS = re.compile(r"\d+(?!.*\d)")
+
+
+@dataclass(frozen=True)
+class SystemSpec:
+    gbfs_url: str
+    locale: str
+    required_feeds: tuple[str, ...]
+    optional_feeds: tuple[str, ...] = ()
+
+
+SYSTEMS: dict[str, SystemSpec] = {
+    "nextbike_bn": SystemSpec(
+        gbfs_url="https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_bn/gbfs.json",
+        locale="de",
+        required_feeds=("station_information", "station_status", "free_bike_status", "vehicle_types"),
+        optional_feeds=("system_information",),
+    ),
+    "dott_berlin": SystemSpec(
+        # Dott only publishes a single "en" locale (confirmed against the live
+        # feed: no "de" key). It also lists gbfs_versions, geofencing_zones and
+        # system_pricing_plans, none of which G1's collector interface needs
+        # (station_information/station_status/vehicle_types/free_bike_status),
+        # so those three are fetched to confirm their shape but not persisted;
+        # see tests/fixtures/gbfs/dott_berlin/README.md.
+        gbfs_url="https://gbfs.api.ridedott.com/public/v2/berlin/gbfs.json",
+        locale="en",
+        required_feeds=("free_bike_status",),
+        optional_feeds=(
+            "station_information",
+            "station_status",
+            "vehicle_types",
+            "system_information",
+            "gbfs_versions",
+            "geofencing_zones",
+            "system_pricing_plans",
+        ),
+    ),
+}
+
+# Feeds whose shape is only confirmed, never written to tests/fixtures/.
+SKIP_PERSISTING = {"gbfs_versions", "geofencing_zones", "system_pricing_plans"}
 
 
 def _user_agent() -> str:
@@ -55,7 +102,7 @@ def _feed_urls(gbfs_payload: dict[str, Any], locale: str) -> dict[str, str]:
     return {feed["name"]: feed["url"] for feed in feeds}
 
 
-def _pseudonymise_bike_ids(free_bike_status: dict[str, Any]) -> dict[str, Any]:
+def _pseudonymise_nextbike_bike_ids(free_bike_status: dict[str, Any]) -> dict[str, Any]:
     """Replace every bike_id with 'fixture-NNNN' and scrub rental_uris.
 
     Idempotent and offline: operates only on the already-parsed payload, so
@@ -75,32 +122,68 @@ def _pseudonymise_bike_ids(free_bike_status: dict[str, Any]) -> dict[str, Any]:
     return free_bike_status
 
 
-def _write(name: str, payload: dict[str, Any]) -> None:
-    path = FIXTURE_DIR / name
+def _pseudonymise_dott_bike_ids(free_bike_status: dict[str, Any]) -> dict[str, Any]:
+    """Replace every bike_id with 'fixture-NNNN' and scrub it out of rental_uris.
+
+    Dott embeds the real bike_id UUID directly in the rental_uris path
+    (unlike nextbike's separate numeric place id), so the scrub is a literal
+    substring replace of the real id with the synthetic one.
+    """
+    bikes = free_bike_status["data"]["bikes"]
+    bikes[:] = bikes[:MAX_FREE_BIKES]
+    for index, bike in enumerate(bikes, start=1):
+        real_id = bike["bike_id"]
+        synthetic = f"fixture-{index:04d}"
+        bike["bike_id"] = synthetic
+        rental_uris = bike.get("rental_uris") or {}
+        for key, uri in rental_uris.items():
+            rental_uris[key] = uri.replace(real_id, synthetic)
+    return free_bike_status
+
+
+PSEUDONYMISERS = {
+    "nextbike_bn": _pseudonymise_nextbike_bike_ids,
+    "dott_berlin": _pseudonymise_dott_bike_ids,
+}
+
+
+def _write(system: str, name: str, payload: dict[str, Any]) -> None:
+    path = FIXTURE_ROOT / system / name
     path.write_text(json.dumps(payload, separators=(",", ":"), ensure_ascii=False))
     print(f"wrote {path}")
 
 
-def main() -> None:
-    FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
+def record(system: str) -> None:
+    spec = SYSTEMS[system]
+    fixture_dir = FIXTURE_ROOT / system
+    fixture_dir.mkdir(parents=True, exist_ok=True)
     user_agent = _user_agent()
 
-    gbfs_payload = _fetch(GBFS_ROOT_URL, user_agent)
-    _write("gbfs.json", gbfs_payload)
+    gbfs_payload = _fetch(spec.gbfs_url, user_agent)
+    _write(system, "gbfs.json", gbfs_payload)
 
-    feed_urls = _feed_urls(gbfs_payload, LOCALE)
-    for name in REQUIRED_FEEDS:
+    feed_urls = _feed_urls(gbfs_payload, spec.locale)
+    for name in spec.required_feeds:
         if name not in feed_urls:
-            raise RuntimeError(f"required feed {name!r} missing from gbfs.json for locale {LOCALE!r}")
+            raise RuntimeError(f"required feed {name!r} missing from gbfs.json for locale {spec.locale!r}")
 
-    for name in (*REQUIRED_FEEDS, *OPTIONAL_FEEDS):
+    for name in (*spec.required_feeds, *spec.optional_feeds):
         url = feed_urls.get(name)
         if url is None:
             continue
         payload = _fetch(url, user_agent)
         if name == "free_bike_status":
-            payload = _pseudonymise_bike_ids(payload)
-        _write(f"{name}.json", payload)
+            payload = PSEUDONYMISERS[system](payload)
+        if name in SKIP_PERSISTING:
+            continue
+        _write(system, f"{name}.json", payload)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--system", required=True, choices=sorted(SYSTEMS))
+    args = parser.parse_args()
+    record(args.system)
 
 
 if __name__ == "__main__":
