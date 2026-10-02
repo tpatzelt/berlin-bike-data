@@ -35,7 +35,7 @@ STATION_STATUS_SCHEMA = pa.schema(
         pa.field("source", pa.string()),
         pa.field("station_id", pa.string()),
         pa.field("num_bikes_available", pa.int32()),
-        pa.field("num_docks_available", pa.int32()),
+        pa.field("num_docks_available", pa.int32(), nullable=True),
         pa.field("num_bikes_disabled", pa.int32(), nullable=True),
         pa.field("is_installed", pa.bool_()),
         pa.field("is_renting", pa.bool_()),
