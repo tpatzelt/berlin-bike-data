@@ -10,10 +10,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Callable, Union
 
 import httpx
 
 FIXTURES_ROOT = Path(__file__).parent.parent / "fixtures" / "gbfs"
+
+#: A per-feed override: either a canned response, or a callable that gets
+#: the request and the number of prior requests for that feed (0 on the
+#: first call), for tests that need responses to change over time (for
+#: example: succeed once, then fail on every later call).
+FeedOverride = Union[httpx.Response, Callable[[httpx.Request, int], httpx.Response]]
 
 
 def load_fixture(source: str, feed_name: str) -> dict:
@@ -22,21 +29,29 @@ def load_fixture(source: str, feed_name: str) -> dict:
 
 
 def fixture_replay_transport(
-    source: str, overrides: dict[str, httpx.Response] | None = None
+    source: str, overrides: dict[str, FeedOverride] | None = None
 ) -> httpx.MockTransport:
     """A MockTransport serving the committed fixtures for ``source``.
 
     Requests are matched by their final path segment (the feed name,
-    without ``.json``). ``overrides`` substitutes a canned
-    ``httpx.Response`` for specific feed names, for tests that need an
-    error or a modified payload instead of the recorded one.
+    without ``.json``). ``overrides`` substitutes a canned ``httpx.Response``
+    or a ``(request, call_count) -> httpx.Response`` callable for specific
+    feed names, for tests that need an error, a modified payload, or a
+    response that changes across calls instead of the recorded one.
     """
     overrides = overrides or {}
+    call_counts: dict[str, int] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         feed_name = request.url.path.rsplit("/", 1)[-1].removesuffix(".json")
-        if feed_name in overrides:
-            return overrides[feed_name]
+        call_count = call_counts.get(feed_name, 0)
+        call_counts[feed_name] = call_count + 1
+
+        override = overrides.get(feed_name)
+        if override is not None:
+            if callable(override):
+                return override(request, call_count)
+            return override
         return httpx.Response(200, json=load_fixture(source, feed_name))
 
     return httpx.MockTransport(handler)
