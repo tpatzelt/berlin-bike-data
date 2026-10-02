@@ -250,6 +250,40 @@ def test_invalid_gap_reason_is_rejected(tmp_path):
         store.write("gaps", SOURCE, table)
 
 
+def test_latest_gap_end_is_none_with_no_gaps(tmp_path):
+    store = Storage(tmp_path)
+    assert store.latest_gap_end(SOURCE, "station_status") is None
+
+
+def test_latest_gap_end_is_max_gap_end_for_that_feed_only(tmp_path):
+    store = Storage(tmp_path)
+    gap_start = _ts(2024, 5, 1, 12, 0, 0)
+
+    store.write("gaps", SOURCE, _gaps_table(gap_start, feed="station_status"))
+    later_start = gap_start + timedelta(hours=1)
+    store.write("gaps", SOURCE, _gaps_table(later_start, feed="station_status"))
+    # A different feed's later gap_end must not affect station_status's.
+    store.write(
+        "gaps",
+        SOURCE,
+        _gaps_table(gap_start + timedelta(hours=5), feed="free_bike_status"),
+    )
+
+    assert store.latest_gap_end(SOURCE, "station_status") == later_start + timedelta(minutes=10)
+
+
+def test_latest_gap_end_reads_across_the_two_newest_partitions(tmp_path):
+    store = Storage(tmp_path)
+    # gap_end lands on the day after gap_start's partition date.
+    gap_start = _ts(2024, 5, 1, 23, 55, 0)
+    table = _gaps_table(gap_start, feed="station_status")
+    assert table.column("gap_end")[0].as_py().date().isoformat() == "2024-05-02"
+
+    store.write("gaps", SOURCE, table)
+
+    assert store.latest_gap_end(SOURCE, "station_status") == gap_start + timedelta(minutes=10)
+
+
 def test_utc_partitioning_near_midnight_uses_real_berlin_offset_not_a_fixed_one(tmp_path):
     store = Storage(tmp_path)
     berlin = ZoneInfo("Europe/Berlin")
