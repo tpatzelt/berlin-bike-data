@@ -10,6 +10,7 @@ has the snapshot, must both be harmless no-ops.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -21,6 +22,7 @@ from berlinbikes.backoff import Clock
 from berlinbikes.cells import aggregate_free_bikes
 from berlinbikes.gbfs import FeedResult, GbfsClient
 from berlinbikes.schemas import (
+    GAPS_SCHEMA,
     STATION_INFORMATION_SCHEMA,
     STATION_STATUS_SCHEMA,
     VEHICLE_TYPES_SCHEMA,
@@ -48,6 +50,10 @@ FEED_INTERVALS_S: dict[str, float] = {
 #: is failing is still retried within two minutes instead of a full day.
 MAX_RETRY_FLOOR_S = 120
 
+#: A feed whose last_updated hasn't advanced for longer than this multiple
+#: of its poll interval is considered stale.
+STALE_FACTOR = 3
+
 
 class PollResult(Enum):
     WRITTEN = "written"
@@ -63,6 +69,11 @@ class Collector:
         self.clock = clock
         self._last_written: dict[str, datetime] = {}
         self._retry_at: dict[str, datetime] = {}
+        #: gap_start of the current run of consecutive failures for a feed.
+        self._outage_start: dict[str, datetime] = {}
+        self._outage_attempts: dict[str, int] = {}
+        #: last_written value a stale_feed row was already recorded for.
+        self._stale_gap_written: dict[str, datetime] = {}
 
     def run(self, stop: threading.Event | None = None, max_iterations: int | None = None) -> None:
         """Poll every due feed, sleep until the next one is due, repeat.
@@ -71,40 +82,122 @@ class Collector:
         the feed list, whichever comes first. A ``FeedError`` or any other
         exception from one feed is logged as a warning; the other feeds keep
         being polled. ``clock.sleep`` is the only sleep used, never
-        ``time.sleep``, so tests can simulate time with a fake clock.
+        ``time.sleep``, so tests can simulate time with a fake clock. Any
+        outage still open when the loop stops is flushed as a gap row.
         """
         if stop is None:
             stop = threading.Event()
 
-        iterations = 0
-        while not stop.is_set():
-            if max_iterations is not None and iterations >= max_iterations:
-                return
-
-            for feed_name in self.source.feeds:
-                if stop.is_set():
+        try:
+            iterations = 0
+            while not stop.is_set():
+                if max_iterations is not None and iterations >= max_iterations:
                     return
-                if not self._is_due(feed_name):
-                    continue
-                try:
-                    self.poll_feed(feed_name)
-                except Exception:
-                    logger.warning("poll failed, will retry later feed=%s", feed_name, exc_info=True)
-                    self._set_retry(feed_name)
-                else:
-                    self._retry_at.pop(feed_name, None)
 
-            iterations += 1
-            if (max_iterations is not None and iterations >= max_iterations) or stop.is_set():
-                return
+                for feed_name in self.source.feeds:
+                    if stop.is_set():
+                        return
+                    if not self._is_due(feed_name):
+                        continue
+                    try:
+                        self.poll_feed(feed_name)
+                    except Exception:
+                        logger.warning(
+                            "poll failed, will retry later feed=%s", feed_name, exc_info=True
+                        )
+                        self._handle_poll_failure(feed_name)
+                    else:
+                        self._retry_at.pop(feed_name, None)
+                        self._handle_poll_success(feed_name)
 
-            sleep_for = self._seconds_until_due()
-            if sleep_for > 0:
-                self.clock.sleep(sleep_for)
+                iterations += 1
+                if (max_iterations is not None and iterations >= max_iterations) or stop.is_set():
+                    return
+
+                sleep_for = self._seconds_until_due()
+                if sleep_for > 0:
+                    self.clock.sleep(sleep_for)
+        finally:
+            self._flush_open_outages()
 
     def _set_retry(self, feed_name: str) -> None:
         floor = min(FEED_INTERVALS_S[feed_name], MAX_RETRY_FLOOR_S)
-        self._retry_at[feed_name] = self.clock.now() + timedelta(seconds=floor)
+        delay = max(floor, self.client.backoff_delay(feed_name))
+        # Round up to a multiple of the floor so retries stay on the same
+        # wake-up grid as healthy feeds instead of waking early on jitter.
+        delay = math.ceil(delay / floor) * floor
+        self._retry_at[feed_name] = self.clock.now() + timedelta(seconds=delay)
+
+    def _handle_poll_failure(self, feed_name: str) -> None:
+        attempts = self._outage_attempts.get(feed_name, 0)
+        if attempts == 0:
+            start = self._last_written.get(feed_name) or self.clock.now()
+            # Avoid colliding with a stale_feed row already written at this
+            # key: start the outage at the first failed attempt instead.
+            if self._stale_gap_written.get(feed_name) == start:
+                start = self.clock.now()
+            self._outage_start[feed_name] = start
+            logger.warning("feed outage starting feed=%s", feed_name)
+        self._outage_attempts[feed_name] = attempts + 1
+        self._set_retry(feed_name)
+
+    def _handle_poll_success(self, feed_name: str) -> None:
+        attempts = self._outage_attempts.pop(feed_name, 0)
+        outage_start = self._outage_start.pop(feed_name, None)
+        if outage_start is not None:
+            gap_end = self._last_written.get(feed_name)
+            if gap_end is not None and gap_end > outage_start:
+                self._write_gap(feed_name, outage_start, gap_end, "fetch_error", attempts)
+            else:
+                logger.info("skipping zero-length fetch_error gap feed=%s", feed_name)
+        self._check_stale(feed_name)
+
+    def _check_stale(self, feed_name: str) -> None:
+        last_ts = self._last_written.get(feed_name)
+        if last_ts is None:
+            return
+        if self._stale_gap_written.get(feed_name) == last_ts:
+            return
+        threshold = STALE_FACTOR * FEED_INTERVALS_S[feed_name]
+        now = self.clock.now()
+        if (now - last_ts).total_seconds() > threshold:
+            self._write_gap(feed_name, last_ts, now, "stale_feed", attempts=0)
+            self._stale_gap_written[feed_name] = last_ts
+
+    def _flush_open_outages(self) -> None:
+        now = self.clock.now()
+        for feed_name in list(self._outage_start):
+            outage_start = self._outage_start.pop(feed_name)
+            attempts = self._outage_attempts.pop(feed_name, 0)
+            if now > outage_start:
+                self._write_gap(feed_name, outage_start, now, "fetch_error", attempts)
+            else:
+                logger.info("skipping zero-length fetch_error gap at shutdown feed=%s", feed_name)
+
+    def _write_gap(
+        self, feed_name: str, gap_start: datetime, gap_end: datetime, reason: str, attempts: int
+    ) -> None:
+        table = pa.Table.from_pylist(
+            [
+                {
+                    "source": self.source.name,
+                    "feed": feed_name,
+                    "gap_start": gap_start,
+                    "gap_end": gap_end,
+                    "reason": reason,
+                    "attempts": attempts,
+                }
+            ],
+            schema=GAPS_SCHEMA,
+        )
+        try:
+            self.storage.write("gaps", self.source.name, table)
+        except DuplicateSnapshotError:
+            logger.warning(
+                "gap write collided with an existing key, skipping feed=%s gap_start=%s",
+                feed_name,
+                gap_start,
+            )
 
     def _effective_due(self, feed_name: str) -> datetime | None:
         """Later of the client's ttl/interval due time and a pending retry.
