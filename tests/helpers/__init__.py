@@ -9,10 +9,17 @@ per-feed overrides for the error cases they're testing.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Union
+from typing import TYPE_CHECKING, Callable, Union
 
 import httpx
+
+from berlinbikes.config import Settings
+
+if TYPE_CHECKING:
+    from berlinbikes.backoff import Clock
+    from berlinbikes.collector import Collector
 
 FIXTURES_ROOT = Path(__file__).parent.parent / "fixtures" / "gbfs"
 
@@ -55,3 +62,38 @@ def fixture_replay_transport(
         return httpx.Response(200, json=load_fixture(source, feed_name))
 
     return httpx.MockTransport(handler)
+
+
+@dataclass
+class StubSource:
+    """A minimal Source stub for tests that want to poll fewer than all four feeds."""
+
+    name: str
+    gbfs_url: str
+    feeds: tuple[str, ...]
+
+
+def make_settings(tmp_path) -> Settings:
+    return Settings.from_env(
+        {
+            "BIKES_DATA_DIR": str(tmp_path),
+            "BIKES_USER_AGENT": "berlinbikes-test/1.0",
+        }
+    )
+
+
+def make_collector(
+    tmp_path,
+    source,
+    transport: httpx.BaseTransport,
+    clock: "Clock",
+) -> "Collector":
+    """A Collector wired to a fixture-replay transport and the given clock."""
+    from berlinbikes.collector import Collector
+    from berlinbikes.gbfs import GbfsClient
+    from berlinbikes.storage import Storage
+
+    settings = make_settings(tmp_path)
+    client = GbfsClient(source.gbfs_url, settings.user_agent, transport=transport, clock=clock)
+    storage = Storage(tmp_path)
+    return Collector(source, client, storage, clock)

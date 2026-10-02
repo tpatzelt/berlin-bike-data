@@ -12,9 +12,10 @@ from __future__ import annotations
 import logging
 import math
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from enum import Enum
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pyarrow as pa
 
@@ -54,6 +55,18 @@ MAX_RETRY_FLOOR_S = 120
 #: of its poll interval is considered stale.
 STALE_FACTOR = 3
 
+#: Feeds with this interval are only fetched once per Europe/Berlin day.
+DAILY_INTERVAL_S = 86400
+
+BERLIN_TZ = ZoneInfo("Europe/Berlin")
+
+
+def _next_berlin_midnight_utc(after: datetime) -> datetime:
+    """The next Europe/Berlin local midnight strictly after ``after``, in UTC."""
+    local = after.astimezone(BERLIN_TZ)
+    next_midnight_local = datetime.combine(local.date() + timedelta(days=1), time.min, tzinfo=BERLIN_TZ)
+    return next_midnight_local.astimezone(timezone.utc)
+
 
 class PollResult(Enum):
     WRITTEN = "written"
@@ -74,6 +87,7 @@ class Collector:
         self._outage_attempts: dict[str, int] = {}
         #: last_written value a stale_feed row was already recorded for.
         self._stale_gap_written: dict[str, datetime] = {}
+        self._resumed = False
 
     def run(self, stop: threading.Event | None = None, max_iterations: int | None = None) -> None:
         """Poll every due feed, sleep until the next one is due, repeat.
@@ -87,6 +101,10 @@ class Collector:
         """
         if stop is None:
             stop = threading.Event()
+
+        if not self._resumed:
+            self._resume()
+            self._resumed = True
 
         try:
             iterations = 0
@@ -119,6 +137,26 @@ class Collector:
                     self.clock.sleep(sleep_for)
         finally:
             self._flush_open_outages()
+
+    def _resume(self) -> None:
+        """Restore in-memory state from what is already on disk.
+
+        For each feed, the latest stored snapshot becomes ``_last_written``
+        so the first poll after a restart reports ``UNCHANGED`` instead of
+        relying on storage's own dedupe. A daily feed whose stored
+        snapshot's Europe/Berlin calendar date is today's is not re-fetched
+        until the next Berlin midnight; "today" is judged by the stored
+        snapshot_ts (the feed's last_updated), not fetched_at.
+        """
+        now = self.clock.now()
+        for feed_name in self.source.feeds:
+            stored = self.storage.latest_snapshot(self.source.name, FEED_TO_DATASET[feed_name])
+            if stored is None:
+                continue
+            self._last_written[feed_name] = stored
+            if FEED_INTERVALS_S[feed_name] == DAILY_INTERVAL_S:
+                if stored.astimezone(BERLIN_TZ).date() == now.astimezone(BERLIN_TZ).date():
+                    self._retry_at[feed_name] = _next_berlin_midnight_utc(now)
 
     def _set_retry(self, feed_name: str) -> None:
         floor = min(FEED_INTERVALS_S[feed_name], MAX_RETRY_FLOOR_S)
