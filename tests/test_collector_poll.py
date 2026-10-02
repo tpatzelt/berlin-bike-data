@@ -1,8 +1,12 @@
 """Tests for berlinbikes.collector: the single-feed poll step.
 
 All HTTP is replayed through httpx.MockTransport against the committed
-fixtures under tests/fixtures/gbfs/nextbike_bn/ (the autouse socket guard in
-conftest.py would fail the test if it tried to reach the network).
+fixtures under tests/fixtures/gbfs/<source_name>/ (the autouse socket guard
+in conftest.py would fail the test if it tried to reach the network).
+
+Parametrized over the ``source_name`` fixture (nextbike_bn, dott_berlin) so
+the same collector behaviour is proven against both sources behind the
+Source interface.
 """
 
 from __future__ import annotations
@@ -16,13 +20,11 @@ from berlinbikes.backoff import FakeClock
 from berlinbikes.collector import Collector, PollResult
 from berlinbikes.config import Settings
 from berlinbikes.gbfs import REQUIRED_FEEDS, GbfsClient
-from berlinbikes.sources import NextbikeSource
 from berlinbikes.storage import Storage
 
-from tests.helpers import fixture_replay_transport, load_fixture
+from tests.helpers import fixture_replay_transport, load_fixture, make_source
 
 NOW = datetime(2024, 1, 1, tzinfo=timezone.utc)
-SOURCE_NAME = "nextbike_bn"
 
 FEED_TO_DATASET = {
     "station_status": "station_status",
@@ -41,92 +43,94 @@ def _settings(tmp_path) -> Settings:
     )
 
 
-def _make_collector(tmp_path, clock: FakeClock | None = None, overrides=None) -> Collector:
+def _make_collector(
+    tmp_path, source_name: str, clock: FakeClock | None = None, overrides=None
+) -> Collector:
     clock = clock or FakeClock(NOW)
     settings = _settings(tmp_path)
-    source = NextbikeSource(settings)
-    transport = fixture_replay_transport(SOURCE_NAME, overrides)
+    source = make_source(source_name, settings)
+    transport = fixture_replay_transport(source_name, overrides)
     client = GbfsClient(source.gbfs_url, settings.user_agent, transport=transport, clock=clock)
     storage = Storage(tmp_path)
     return Collector(source, client, storage, clock)
 
 
-def _snapshot_day(feed_name: str = "station_status"):
-    last_updated = load_fixture(SOURCE_NAME, feed_name)["last_updated"]
+def _snapshot_day(source_name: str, feed_name: str = "station_status"):
+    last_updated = load_fixture(source_name, feed_name)["last_updated"]
     return datetime.fromtimestamp(last_updated, tz=timezone.utc).date()
 
 
-def _partition_dir(tmp_path, feed_name: str, day=None):
-    day = day or _snapshot_day(feed_name)
+def _partition_dir(tmp_path, source_name: str, feed_name: str, day=None):
+    day = day or _snapshot_day(source_name, feed_name)
     dataset = FEED_TO_DATASET[feed_name]
-    return tmp_path / SOURCE_NAME / dataset / f"date={day.isoformat()}"
+    return tmp_path / source_name / dataset / f"date={day.isoformat()}"
 
 
-def _part_files(tmp_path, feed_name: str):
-    partition_dir = _partition_dir(tmp_path, feed_name)
+def _part_files(tmp_path, source_name: str, feed_name: str):
+    partition_dir = _partition_dir(tmp_path, source_name, feed_name)
     if not partition_dir.is_dir():
         return []
     return sorted(partition_dir.glob("part-*.parquet"))
 
 
-def test_poll_feed_writes_rows_matching_fixture_counts(tmp_path):
-    collector = _make_collector(tmp_path)
+def test_poll_feed_writes_rows_matching_fixture_counts(tmp_path, source_name):
+    collector = _make_collector(tmp_path, source_name)
 
     for feed_name in REQUIRED_FEEDS:
         assert collector.poll_feed(feed_name) == PollResult.WRITTEN
 
-    station_status = load_fixture(SOURCE_NAME, "station_status")
-    station_information = load_fixture(SOURCE_NAME, "station_information")
-    vehicle_types = load_fixture(SOURCE_NAME, "vehicle_types")
-    free_bike_status = load_fixture(SOURCE_NAME, "free_bike_status")
+    station_status = load_fixture(source_name, "station_status")
+    station_information = load_fixture(source_name, "station_information")
+    vehicle_types = load_fixture(source_name, "vehicle_types")
+    free_bike_status = load_fixture(source_name, "free_bike_status")
 
-    status_files = _part_files(tmp_path, "station_status")
+    status_files = _part_files(tmp_path, source_name, "station_status")
     assert len(status_files) == 1
     status_table = pq.read_table(status_files[0])
     assert status_table.num_rows == len(station_status["data"]["stations"])
 
-    info_files = _part_files(tmp_path, "station_information")
+    info_files = _part_files(tmp_path, source_name, "station_information")
     assert len(info_files) == 1
     info_table = pq.read_table(info_files[0])
     assert info_table.num_rows == len(station_information["data"]["stations"])
 
-    vehicle_files = _part_files(tmp_path, "vehicle_types")
+    vehicle_files = _part_files(tmp_path, source_name, "vehicle_types")
     assert len(vehicle_files) == 1
     vehicle_table = pq.read_table(vehicle_files[0])
     assert vehicle_table.num_rows == len(vehicle_types["data"]["vehicle_types"])
 
-    cell_files = _part_files(tmp_path, "free_bike_status")
+    cell_files = _part_files(tmp_path, source_name, "free_bike_status")
     assert len(cell_files) == 1
     cells_table = pq.read_table(cell_files[0])
     assert sum(cells_table.column("num_bikes").to_pylist()) == len(free_bike_status["data"]["bikes"])
 
 
-def test_poll_feed_returns_unchanged_when_last_updated_has_not_advanced(tmp_path):
-    collector = _make_collector(tmp_path)
+def test_poll_feed_returns_unchanged_when_last_updated_has_not_advanced(tmp_path, source_name):
+    collector = _make_collector(tmp_path, source_name)
 
     assert collector.poll_feed("station_status") == PollResult.WRITTEN
     assert collector.poll_feed("station_status") == PollResult.UNCHANGED
 
-    assert len(_part_files(tmp_path, "station_status")) == 1
+    assert len(_part_files(tmp_path, source_name, "station_status")) == 1
 
 
-def test_poll_feed_returns_duplicate_for_a_fresh_collector_on_the_same_storage(tmp_path):
-    first_collector = _make_collector(tmp_path)
+def test_poll_feed_returns_duplicate_for_a_fresh_collector_on_the_same_storage(tmp_path, source_name):
+    first_collector = _make_collector(tmp_path, source_name)
     assert first_collector.poll_feed("station_status") == PollResult.WRITTEN
 
-    second_collector = _make_collector(tmp_path)
+    second_collector = _make_collector(tmp_path, source_name)
     assert second_collector.poll_feed("station_status") == PollResult.DUPLICATE
 
-    assert len(_part_files(tmp_path, "station_status")) == 1
+    assert len(_part_files(tmp_path, source_name, "station_status")) == 1
 
 
-def test_no_bike_id_reaches_written_parquet_files(tmp_path):
-    collector = _make_collector(tmp_path)
+def test_no_bike_id_reaches_written_parquet_files(tmp_path, source_name):
+    collector = _make_collector(tmp_path, source_name)
 
     for feed_name in REQUIRED_FEEDS:
         assert collector.poll_feed(feed_name) == PollResult.WRITTEN
 
-    free_bike_status = load_fixture(SOURCE_NAME, "free_bike_status")
+    free_bike_status = load_fixture(source_name, "free_bike_status")
     bike_ids = [bike["bike_id"].encode() for bike in free_bike_status["data"]["bikes"]]
     assert bike_ids
 
@@ -138,23 +142,27 @@ def test_no_bike_id_reaches_written_parquet_files(tmp_path):
             assert bike_id not in content
 
 
-def test_station_missing_num_docks_available_is_stored_as_null(tmp_path):
-    body = load_fixture(SOURCE_NAME, "station_status")
+def test_station_missing_num_docks_available_is_stored_as_null(tmp_path, source_name):
+    body = load_fixture(source_name, "station_status")
     stations = [dict(station) for station in body["data"]["stations"]]
     missing_station_id = stations[0]["station_id"]
-    del stations[0]["num_docks_available"]
+    stations[0].pop("num_docks_available", None)
     modified = {**body, "data": {**body["data"], "stations": stations}}
 
     collector = _make_collector(
-        tmp_path, overrides={"station_status": httpx.Response(200, json=modified)}
+        tmp_path, source_name, overrides={"station_status": httpx.Response(200, json=modified)}
     )
 
     assert collector.poll_feed("station_status") == PollResult.WRITTEN
 
-    status_table = pq.read_table(_part_files(tmp_path, "station_status")[0])
+    status_table = pq.read_table(_part_files(tmp_path, source_name, "station_status")[0])
     rows = {row["station_id"]: row["num_docks_available"] for row in status_table.to_pylist()}
 
     assert rows[missing_station_id] is None
     other_values = [value for station_id, value in rows.items() if station_id != missing_station_id]
     assert other_values
-    assert all(isinstance(value, int) for value in other_values)
+    if source_name == "dott_berlin":
+        # The dott_berlin fixture never reports num_docks_available at all.
+        assert all(value is None for value in other_values)
+    else:
+        assert all(isinstance(value, int) for value in other_values)

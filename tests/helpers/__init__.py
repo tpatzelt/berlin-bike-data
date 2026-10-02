@@ -83,6 +83,17 @@ def make_settings(tmp_path, **env_overrides: str) -> Settings:
     )
 
 
+def make_source(source_name: str, settings: Settings):
+    """The real Source implementation for ``source_name`` (``"nextbike_bn"`` or ``"dott_berlin"``)."""
+    from berlinbikes.sources import DottSource, NextbikeSource
+
+    if source_name == "nextbike_bn":
+        return NextbikeSource(settings)
+    if source_name == "dott_berlin":
+        return DottSource(settings)
+    raise ValueError(f"unknown source_name: {source_name!r}")
+
+
 def make_collector(
     tmp_path,
     source,

@@ -23,3 +23,8 @@ def block_network(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect_ex", _blocked)
     monkeypatch.setattr(socket, "create_connection", _blocked)
     yield
+
+
+@pytest.fixture(params=["nextbike_bn", "dott_berlin"], ids=lambda p: p)
+def source_name(request):
+    return request.param
