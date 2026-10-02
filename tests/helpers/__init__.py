@@ -73,11 +73,12 @@ class StubSource:
     feeds: tuple[str, ...]
 
 
-def make_settings(tmp_path) -> Settings:
+def make_settings(tmp_path, **env_overrides: str) -> Settings:
     return Settings.from_env(
         {
             "BIKES_DATA_DIR": str(tmp_path),
             "BIKES_USER_AGENT": "berlinbikes-test/1.0",
+            **env_overrides,
         }
     )
 

@@ -350,7 +350,7 @@ class Collector:
                 "source": self.source.name,
                 "station_id": station["station_id"],
                 "num_bikes_available": station["num_bikes_available"],
-                "num_docks_available": station["num_docks_available"],
+                "num_docks_available": station.get("num_docks_available"),
                 "num_bikes_disabled": station.get("num_bikes_disabled"),
                 "is_installed": station["is_installed"],
                 "is_renting": station["is_renting"],

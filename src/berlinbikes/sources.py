@@ -26,3 +26,19 @@ class NextbikeSource:
 
     def __init__(self, settings: Settings) -> None:
         self.gbfs_url = settings.nextbike_gbfs_url
+
+
+class DottSource:
+    name = "dott_berlin"
+    feeds = REQUIRED_FEEDS
+
+    def __init__(self, settings: Settings) -> None:
+        self.gbfs_url = settings.dott_gbfs_url
+
+
+def enabled_sources(settings: Settings) -> list[Source]:
+    """The sources a collector should poll: nextbike always, Dott when enabled."""
+    sources: list[Source] = [NextbikeSource(settings)]
+    if settings.dott_enabled:
+        sources.append(DottSource(settings))
+    return sources

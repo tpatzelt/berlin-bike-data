@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import httpx
 import pyarrow.parquet as pq
 
 from berlinbikes.backoff import FakeClock
@@ -40,11 +41,11 @@ def _settings(tmp_path) -> Settings:
     )
 
 
-def _make_collector(tmp_path, clock: FakeClock | None = None) -> Collector:
+def _make_collector(tmp_path, clock: FakeClock | None = None, overrides=None) -> Collector:
     clock = clock or FakeClock(NOW)
     settings = _settings(tmp_path)
     source = NextbikeSource(settings)
-    transport = fixture_replay_transport(SOURCE_NAME)
+    transport = fixture_replay_transport(SOURCE_NAME, overrides)
     client = GbfsClient(source.gbfs_url, settings.user_agent, transport=transport, clock=clock)
     storage = Storage(tmp_path)
     return Collector(source, client, storage, clock)
@@ -135,3 +136,25 @@ def test_no_bike_id_reaches_written_parquet_files(tmp_path):
         content = path.read_bytes()
         for bike_id in bike_ids:
             assert bike_id not in content
+
+
+def test_station_missing_num_docks_available_is_stored_as_null(tmp_path):
+    body = load_fixture(SOURCE_NAME, "station_status")
+    stations = [dict(station) for station in body["data"]["stations"]]
+    missing_station_id = stations[0]["station_id"]
+    del stations[0]["num_docks_available"]
+    modified = {**body, "data": {**body["data"], "stations": stations}}
+
+    collector = _make_collector(
+        tmp_path, overrides={"station_status": httpx.Response(200, json=modified)}
+    )
+
+    assert collector.poll_feed("station_status") == PollResult.WRITTEN
+
+    status_table = pq.read_table(_part_files(tmp_path, "station_status")[0])
+    rows = {row["station_id"]: row["num_docks_available"] for row in status_table.to_pylist()}
+
+    assert rows[missing_station_id] is None
+    other_values = [value for station_id, value in rows.items() if station_id != missing_station_id]
+    assert other_values
+    assert all(isinstance(value, int) for value in other_values)
