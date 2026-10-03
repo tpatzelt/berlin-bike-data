@@ -61,4 +61,62 @@
 </p>
 {% endif %}
 </article>
+<article>
+<section lang="de">
+<h2>Der Morgen-Engpass um 8 Uhr</h2>
+{% if shortage_chart.status == "ok" and shortage_chart.share_pct is not none %}
+<p>An Wochentagen waren um 8:00 Uhr durchschnittlich {{ "%.1f"|format(shortage_chart.share_pct) }}% der Stationen leer.</p>
+{% endif %}
+</section>
+<section lang="en">
+<h2>The 8am morning shortage</h2>
+{% if shortage_chart.status == "ok" and shortage_chart.share_pct is not none %}
+<p>On weekdays, an average of {{ "%.1f"|format(shortage_chart.share_pct) }}% of stations were empty at 8:00.</p>
+{% endif %}
+</section>
+{% if shortage_chart.status == "ok" %}
+<figure>
+<svg viewBox="{{ shortage_chart.view_box }}" role="img" class="chart bars" aria-label="{{ shortage_chart.aria_label }}">
+{% for bar in shortage_chart.bars %}
+<rect x="{{ bar.bar_x }}" y="{{ bar.bar_y }}" width="{{ bar.bar_width }}" height="{{ bar.bar_height }}" fill="var(--accent)"></rect>
+<text x="{{ bar.bar_x - 4 }}" y="{{ bar.label_y }}" text-anchor="end">{{ bar.station_id }} ({{ bar.ortsteil }})</text>
+<text x="{{ bar.value_x }}" y="{{ bar.label_y }}">{{ "%.1f"|format(bar.minutes_per_day) }}</text>
+{% endfor %}
+</svg>
+<figcaption>
+<span lang="de">Stationen mit den meisten leeren Minuten pro Tag im Morgenfenster (Mo–Fr 7:30–8:30 Uhr), auf Basis von {{ shortage_chart.full_days }} vollen Tagen.</span>
+<span lang="en">Stations with the most empty minutes per day in the morning window (Mon–Fri 7:30–8:30), based on {{ shortage_chart.full_days }} full days.</span>
+</figcaption>
+</figure>
+<details>
+<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<table>
+<caption>
+<span lang="de">Leere Minuten pro Tag im Morgenfenster, nach Station</span>
+<span lang="en">Empty minutes per day in the morning window, by station</span>
+</caption>
+<thead>
+<tr>
+<th scope="col"><span lang="de">Station</span><span lang="en">Station</span></th>
+<th scope="col">Ortsteil</th>
+<th scope="col"><span lang="de">Min./Tag</span><span lang="en">Min/day</span></th>
+</tr>
+</thead>
+<tbody>
+{% for bar in shortage_chart.bars %}
+<tr>
+<th scope="row">{{ bar.station_id }}</th>
+<td>{{ bar.ortsteil }}</td>
+<td>{{ "%.1f"|format(bar.minutes_per_day) }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</details>
+{% else %}
+<p class="not-enough-data">
+{{ shortage_chart.message }} ({{ shortage_chart.full_days }}/{{ min_full_days }})
+</p>
+{% endif %}
+</article>
 {% endblock %}

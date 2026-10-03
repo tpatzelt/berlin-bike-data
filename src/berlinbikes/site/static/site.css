@@ -56,6 +56,8 @@ svg.chart { display: block; width: 100%; height: auto; }
 
 .chart-legend .swatch { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 2px; }
 
+svg.bars text { font-size: 10px; fill: var(--fg); }
+
 table { border-collapse: collapse; }
 
 th, td { padding: 0.15rem 0.4rem; text-align: right; }
