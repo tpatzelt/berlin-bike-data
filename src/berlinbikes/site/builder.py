@@ -1,0 +1,50 @@
+"""Renders the jinja2 site templates into ``site_dir``.
+
+The real charts land in later tasks; for now ``index.html`` only switches
+between its content and a "not enough data yet" state, based on whether any
+Parquet data has been collected under ``data_dir``.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+_TEMPLATES_DIR = Path(__file__).parent / "templates"
+_STATIC_DIR = Path(__file__).parent / "static"
+
+PAGES = ("index.html", "methodology.html", "impressum.html", "datenschutz.html")
+
+
+def _has_data(data_dir: Path) -> bool:
+    return next(data_dir.rglob("*.parquet"), None) is not None
+
+
+def build_site(data_dir: str | Path, site_dir: str | Path) -> list[Path]:
+    """Render ``PAGES`` and copy static assets into ``site_dir``.
+
+    Writes only under ``site_dir``; never touches the repository.
+    """
+    site_dir = Path(site_dir)
+    site_dir.mkdir(parents=True, exist_ok=True)
+
+    env = Environment(
+        loader=FileSystemLoader(_TEMPLATES_DIR),
+        autoescape=select_autoescape(["html"]),
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+    context = {"has_data": _has_data(Path(data_dir))}
+
+    written = []
+    for page in PAGES:
+        out_path = site_dir / page
+        out_path.write_text(env.get_template(page).render(**context))
+        written.append(out_path)
+
+    css_dst = site_dir / "site.css"
+    css_dst.write_text((_STATIC_DIR / "site.css").read_text())
+    written.append(css_dst)
+
+    return written
