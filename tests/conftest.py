@@ -5,8 +5,11 @@ never depend on, or accidentally hit, a live feed.
 """
 
 import socket
+from datetime import date
 
 import pytest
+
+from tests.synthetic import build_dataset
 
 
 class NetworkBlockedError(RuntimeError):
@@ -28,3 +31,11 @@ def block_network(monkeypatch):
 @pytest.fixture(params=["nextbike_bn", "dott_berlin"], ids=lambda p: p)
 def source_name(request):
     return request.param
+
+
+@pytest.fixture(scope="session")
+def synthetic_data_dir(tmp_path_factory):
+    """A 28-day synthetic dataset spanning the 2026-10-25 DST fall-back day."""
+    data_dir = tmp_path_factory.mktemp("synthetic")
+    build_dataset(data_dir, start_date=date(2026, 10, 12), days=28)
+    return data_dir
