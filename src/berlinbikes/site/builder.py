@@ -11,6 +11,10 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from berlinbikes.analysis import MIN_FULL_DAYS
+from berlinbikes.analysis.weather_effect import COLD_C_THRESHOLD, RAIN_MM_THRESHOLD
+from berlinbikes.site.sources import DATA_SOURCES
+
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -35,7 +39,13 @@ def build_site(data_dir: str | Path, site_dir: str | Path) -> list[Path]:
         trim_blocks=True,
         lstrip_blocks=True,
     )
-    context = {"has_data": _has_data(Path(data_dir))}
+    context = {
+        "has_data": _has_data(Path(data_dir)),
+        "data_sources": DATA_SOURCES,
+        "min_full_days": MIN_FULL_DAYS,
+        "rain_mm_threshold": RAIN_MM_THRESHOLD,
+        "cold_c_threshold": COLD_C_THRESHOLD,
+    }
 
     written = []
     for page in PAGES:
