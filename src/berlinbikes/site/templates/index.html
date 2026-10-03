@@ -179,4 +179,65 @@
 </p>
 {% endif %}
 </article>
+<article>
+<section lang="de">
+<h2>Netto-Fluss zwischen Bezirken</h2>
+<p>Netto gewonnene oder verlorene Räder je Bezirk und Uhrzeit, Mo-Fr im Mittel pro Tag (Europe/Berlin).</p>
+</section>
+<section lang="en">
+<h2>Net flow between Bezirke</h2>
+<p>Net bikes gained or lost per Bezirk by local hour, Mon-Fri mean per day (Europe/Berlin).</p>
+</section>
+{% if flow_chart.status == "ok" %}
+<figure>
+<svg viewBox="{{ flow_chart.view_box }}" role="img" class="chart"
+     aria-label="Räder gewonnen/verloren je Bezirk und Uhrzeit (0-23 Uhr, Mo-Fr im Mittel pro Tag, Europe/Berlin) / Bikes gained/lost per Bezirk by local hour (0-23, Mon-Fri mean per day, Europe/Berlin)">
+<line x1="{{ flow_chart.x_start }}" x2="{{ flow_chart.x_end }}" y1="{{ flow_chart.zero_y }}" y2="{{ flow_chart.zero_y }}" stroke="var(--muted)" stroke-dasharray="4 2"></line>
+{% for bez in flow_chart.bezirke %}
+<polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2"></polyline>
+{% endfor %}
+</svg>
+<figcaption>
+<span lang="de">Räder gewonnen (+) / verloren (-) je Bezirk und Uhrzeit (0–23 Uhr, Europe/Berlin), Mo-Fr im Mittel pro Tag, auf Basis von {{ flow_chart.full_days }} vollen Tagen.</span>
+<span lang="en">Bikes gained (+) / lost (-) per Bezirk by local hour (0–23, Europe/Berlin), Mon-Fri mean per day, based on {{ flow_chart.full_days }} full days.</span>
+</figcaption>
+</figure>
+<ul class="chart-legend">
+{% for bez in flow_chart.bezirke %}
+<li><span class="swatch" style="background: var(--series-{{ bez.color_index }})"></span><span>{{ bez.name }}</span></li>
+{% endfor %}
+</ul>
+<details>
+<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<table>
+<caption>
+<span lang="de">Netto gewonnene/verlorene Räder je Bezirk und Uhrzeit (Mo-Fr)</span>
+<span lang="en">Net bikes gained/lost per Bezirk by local hour (Mo-Fr)</span>
+</caption>
+<thead>
+<tr>
+<th scope="col">Bezirk</th>
+{% for hour in range(24) %}
+<th scope="col">{{ hour }}</th>
+{% endfor %}
+</tr>
+</thead>
+<tbody>
+{% for bez in flow_chart.bezirke %}
+<tr>
+<th scope="row">{{ bez.name }}</th>
+{% for value in bez.hours %}
+<td>{{ "%.1f"|format(value) }}</td>
+{% endfor %}
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</details>
+{% else %}
+<p class="not-enough-data">
+{{ flow_chart.message }} ({{ flow_chart.full_days }}/{{ min_full_days }})
+</p>
+{% endif %}
+</article>
 {% endblock %}

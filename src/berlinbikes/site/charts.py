@@ -16,6 +16,10 @@ morning window, bars colored via ``--accent``.
 ``bezirk_availability_chart`` draws the per-Bezirk availability-by-hour line
 chart (Mon-Fri only), one ``<polyline>`` per Bezirk sorted by name, colored
 via ``--series-1``..``--series-7`` (cycling if there are more than 7).
+
+``flow_chart`` draws the per-Bezirk net-flow-by-hour line chart (weekday mean
+per day), one ``<polyline>`` per Bezirk sorted by name around a visible zero
+baseline, colored the same way as ``bezirk_availability_chart``.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from pathlib import Path
 from berlinbikes.analysis.availability import availability_by_hour
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.empty import MORNING_WINDOW, morning_shortage
+from berlinbikes.analysis.flow import net_flow_by_bezirk
 
 WEEKDAY_NAMES = (
     ("Mo", "Mon"),
@@ -190,6 +195,85 @@ def bezirk_availability_chart(data_dir: str | Path) -> BezirkAvailabilityChart:
         full_days=result.full_days,
         message=None,
         view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        bezirke=bezirke,
+    )
+
+
+@dataclass(frozen=True)
+class FlowSeries:
+    index: int
+    color_index: int
+    name: str
+    points: str
+    hours: list[float]
+
+
+@dataclass(frozen=True)
+class FlowChart:
+    status: str
+    full_days: int
+    message: str | None
+    view_box: str
+    zero_y: float
+    x_start: float
+    x_end: float
+    bezirke: list[FlowSeries] | None
+
+
+def flow_chart(data_dir: str | Path) -> FlowChart:
+    """Net bikes gained/lost per Bezirk by local hour, weekday mean per day.
+
+    Uses :func:`net_flow_by_bezirk`'s ``day_type='weekday'`` rows, whose
+    ``net`` value is already the mean per weekday date (the metric divides
+    by the number of weekday dates in
+    :func:`berlinbikes.analysis.coverage.full_days`). An (bezirk, hour) with
+    no row (no attributable deltas) is drawn as 0, not left out of the
+    polyline. Returns ``status="insufficient_data"`` with no ``bezirke``
+    below the 14-full-day minimum, same as :func:`net_flow_by_bezirk` itself.
+    """
+    result = net_flow_by_bezirk(connect(data_dir))
+    if result.status != "ok":
+        return FlowChart(
+            status=result.status,
+            full_days=result.full_days,
+            message=result.message,
+            view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+            zero_y=0.0,
+            x_start=0.0,
+            x_end=0.0,
+            bezirke=None,
+        )
+
+    net_by_key: dict[tuple[str, int], float] = {}
+    bezirk_names: set[str] = set()
+    for day_type, hour, bezirk, _gains, _losses, net in result.rows:
+        if day_type != "weekday":
+            continue
+        bezirk_names.add(bezirk)
+        net_by_key[(bezirk, hour)] = net
+
+    all_values = list(net_by_key.values()) + [0.0]
+    y_min, y_max = min(all_values), max(all_values)
+    y_span = (y_max - y_min) or 1.0
+
+    bezirke = []
+    for index, name in enumerate(sorted(bezirk_names)):
+        hours = [net_by_key.get((name, hour), 0.0) for hour in range(24)]
+        points = " ".join(
+            f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}" for hour, value in enumerate(hours)
+        )
+        bezirke.append(
+            FlowSeries(index=index, color_index=(index % 7) + 1, name=name, points=points, hours=hours)
+        )
+
+    return FlowChart(
+        status="ok",
+        full_days=result.full_days,
+        message=None,
+        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        zero_y=_scale_y(0.0, y_min, y_span),
+        x_start=_scale_x(0),
+        x_end=_scale_x(23),
         bezirke=bezirke,
     )
 
