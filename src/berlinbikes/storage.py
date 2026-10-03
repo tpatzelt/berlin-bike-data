@@ -205,9 +205,13 @@ class Storage:
     def write(self, dataset: str, source: str, table: pa.Table) -> Path:
         """Write ``table`` as one new, finished Parquet file.
 
-        Raises ``DuplicateSnapshotError`` if the write's dedupe key already
-        exists, ``SnapshotFileCollisionError`` if the destination file
-        exists despite that (leaving it untouched), and ``ValueError`` if
+        The dedupe key (``snapshot_ts``, or ``(feed, gap_start)`` for
+        ``gaps``) maps one-to-one onto the destination filename, so the
+        duplicate check is a single path lookup instead of re-reading every
+        part file already in the partition. Raises ``DuplicateSnapshotError``
+        if that destination file already exists, ``SnapshotFileCollisionError``
+        if it is created by a concurrent writer between the check and the
+        publishing ``os.link`` (leaving it untouched), and ``ValueError`` if
         the table's ``source`` column disagrees with ``source``, a
         ``gaps.reason`` is invalid, or the rows don't share one partition
         key.
@@ -222,9 +226,6 @@ class Storage:
         partition_dir.mkdir(parents=True, exist_ok=True)
         self._clean_leftover_tmp_files(partition_dir)
 
-        if key in self.existing_snapshots(source, dataset, day):
-            raise DuplicateSnapshotError(f"snapshot key already written: {key!r}")
-
         if dataset == "gaps":
             feed, gap_start = key
             filename = f"part-{feed}-{_stamp(gap_start)}.parquet"
@@ -233,7 +234,7 @@ class Storage:
 
         final_path = partition_dir / filename
         if final_path.exists():
-            raise SnapshotFileCollisionError(f"{final_path} already exists")
+            raise DuplicateSnapshotError(f"snapshot key already written: {key!r}")
 
         tmp_path = partition_dir / f"{_TMP_PREFIX}{uuid.uuid4().hex}.partial"
         cast_table = table.cast(schema)
