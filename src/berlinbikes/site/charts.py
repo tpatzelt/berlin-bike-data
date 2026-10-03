@@ -1,11 +1,17 @@
-"""Builds the citywide availability-by-hour line chart as plain-SVG chart data.
+"""Builds plain-SVG chart data for the article page's charts.
 
-Renders no HTML itself: it returns the scaled points and the raw per-hour
-means that ``index.html`` draws as SVG ``<polyline>``s and a ``<table>``
-fallback. Colors are assigned by weekday (Monday first) to the
+Renders no HTML itself: it returns the scaled points/bars that
+``index.html`` draws as SVG and a ``<table>`` fallback.
+
+``availability_chart`` draws the citywide availability-by-hour line chart,
+one ``<polyline>`` per weekday (Monday first), colored via the
 ``--series-1``..``--series-7`` custom properties defined in ``site.css``,
 following the validated categorical order from the project's data-viz
 palette (blue, orange, aqua, yellow, magenta, green, violet).
+
+``shortage_chart`` draws the G4 8:00 morning-shortage headline and a
+horizontal bar chart of the top stations by empty minutes per day in the
+morning window, bars colored via ``--accent``.
 """
 
 from __future__ import annotations
@@ -15,6 +21,7 @@ from pathlib import Path
 
 from berlinbikes.analysis.availability import availability_by_hour
 from berlinbikes.analysis.db import connect
+from berlinbikes.analysis.empty import MORNING_WINDOW, morning_shortage
 
 WEEKDAY_NAMES = (
     ("Mo", "Mon"),
@@ -101,4 +108,125 @@ def availability_chart(data_dir: str | Path) -> AvailabilityChart:
         message=None,
         view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
         weekdays=weekdays,
+    )
+
+
+#: How many stations the morning-shortage bar chart shows.
+SHORTAGE_TOP_N = 10
+
+_BAR_VIEW_WIDTH = 480
+_BAR_HEIGHT = 18
+_BAR_GAP = 8
+_BAR_PAD_LEFT = 150
+_BAR_PAD_RIGHT = 54
+_BAR_PAD_TOP = 8
+_BAR_PAD_BOTTOM = 8
+_BAR_MIN_VIEW_HEIGHT = 60
+
+_WEEKDAY_ABBR_DE = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+_WEEKDAY_ABBR_EN = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def _window_label(window) -> tuple[str, str]:
+    """A short bilingual description of a morning-shortage ``Window``, e.g. ``Mo-Fr 7:30-8:30``."""
+    weekdays, start, end = window
+    days = sorted(weekdays)
+    time_part = f"{start.hour}:{start.minute:02d}-{end.hour}:{end.minute:02d}"
+    de = f"{_WEEKDAY_ABBR_DE[days[0]]}-{_WEEKDAY_ABBR_DE[days[-1]]} {time_part}"
+    en = f"{_WEEKDAY_ABBR_EN[days[0]]}-{_WEEKDAY_ABBR_EN[days[-1]]} {time_part}"
+    return de, en
+
+
+@dataclass(frozen=True)
+class ShortageBar:
+    station_id: str
+    ortsteil: str
+    minutes_per_day: float
+    bar_x: float
+    bar_y: float
+    bar_width: float
+    bar_height: float
+    label_y: float
+    value_x: float
+
+
+@dataclass(frozen=True)
+class ShortageChart:
+    status: str
+    full_days: int
+    message: str | None
+    share_pct: float | None
+    view_box: str
+    aria_label: str
+    bars: list[ShortageBar] | None
+
+
+def _bar_view_height(n: int) -> float:
+    n = max(n, 1)
+    return _BAR_PAD_TOP + _BAR_PAD_BOTTOM + n * _BAR_HEIGHT + (n - 1) * _BAR_GAP
+
+
+def shortage_chart(data_dir: str | Path) -> ShortageChart:
+    """The G4 8:00 morning-shortage headline and its top-stations bar chart.
+
+    Returns ``status="insufficient_data"`` with no ``bars`` below the
+    14-full-day minimum, same as :func:`morning_shortage` itself. When
+    enough data exists but no snapshot lands on exactly local 08:00:00 (as
+    on real, non-synthetic data), ``morning_shortage`` reports
+    ``share_empty_at_0800=None``; this is rendered as ``share_pct=None`` so
+    the headline sentence is left out, while the bar chart and table (which
+    do not depend on the exact-08:00 match) still render.
+    """
+    result = morning_shortage(connect(data_dir))
+    de_label, en_label = _window_label(MORNING_WINDOW)
+    if result.status != "ok":
+        return ShortageChart(
+            status=result.status,
+            full_days=result.full_days,
+            message=result.message,
+            share_pct=None,
+            view_box=f"0 0 {_BAR_VIEW_WIDTH} {_BAR_MIN_VIEW_HEIGHT}",
+            aria_label="",
+            bars=None,
+        )
+
+    share = result.rows["share_empty_at_0800"]
+    share_pct = round(share * 100, 1) if share is not None else None
+
+    top_stations = result.rows["stations"][:SHORTAGE_TOP_N]
+    values = [minutes_per_day for *_rest, minutes_per_day in top_stations]
+    max_value = max(values) if values else 1.0
+    plot_width = _BAR_VIEW_WIDTH - _BAR_PAD_LEFT - _BAR_PAD_RIGHT
+
+    bars = []
+    for i, (station_id, _bezirk, ortsteil, _total, minutes_per_day) in enumerate(top_stations):
+        bar_y = _BAR_PAD_TOP + i * (_BAR_HEIGHT + _BAR_GAP)
+        bar_width = (minutes_per_day / max_value) * plot_width if max_value else 0.0
+        bars.append(
+            ShortageBar(
+                station_id=station_id,
+                ortsteil=ortsteil,
+                minutes_per_day=minutes_per_day,
+                bar_x=_BAR_PAD_LEFT,
+                bar_y=bar_y,
+                bar_width=bar_width,
+                bar_height=_BAR_HEIGHT,
+                label_y=bar_y + _BAR_HEIGHT * 0.65,
+                value_x=_BAR_PAD_LEFT + bar_width + 4,
+            )
+        )
+
+    aria_label = (
+        f"Leerstehende Stationen am Morgen, {de_label} Uhr, Top {len(bars)} / "
+        f"Stations empty in the morning, {en_label}, top {len(bars)}"
+    )
+
+    return ShortageChart(
+        status="ok",
+        full_days=result.full_days,
+        message=None,
+        share_pct=share_pct,
+        view_box=f"0 0 {_BAR_VIEW_WIDTH} {_bar_view_height(len(bars))}",
+        aria_label=aria_label,
+        bars=bars,
     )
