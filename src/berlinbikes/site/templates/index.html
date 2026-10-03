@@ -119,4 +119,64 @@
 </p>
 {% endif %}
 </article>
+<article>
+<section lang="de">
+<h2>Verfügbarkeit je Bezirk</h2>
+<p>Mittlere Anzahl verfügbarer Räder je Bezirk, Mo-Fr, nach Uhrzeit (Europe/Berlin).</p>
+</section>
+<section lang="en">
+<h2>Availability by Bezirk</h2>
+<p>Mean number of bikes available by Bezirk, Mon-Fri, by local hour (Europe/Berlin).</p>
+</section>
+{% if bezirk_availability_chart.status == "ok" %}
+<figure>
+<svg viewBox="{{ bezirk_availability_chart.view_box }}" role="img" class="chart"
+     aria-label="Mittlere Anzahl verfügbarer Räder je Bezirk, Mo-Fr, nach Uhrzeit (0-23 Uhr, Europe/Berlin) / Mean bikes available by Bezirk, Mon-Fri, by local hour (0-23, Europe/Berlin)">
+{% for bez in bezirk_availability_chart.bezirke %}
+<polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2"></polyline>
+{% endfor %}
+</svg>
+<figcaption>
+<span lang="de">Verfügbare Räder je Bezirk, Mo-Fr, je Uhrzeit (0–23 Uhr, Europe/Berlin), auf Basis von {{ bezirk_availability_chart.full_days }} vollen Tagen.</span>
+<span lang="en">Bikes available by Bezirk, Mo-Fr, by local hour (0–23, Europe/Berlin), based on {{ bezirk_availability_chart.full_days }} full days.</span>
+</figcaption>
+</figure>
+<ul class="chart-legend">
+{% for bez in bezirk_availability_chart.bezirke %}
+<li><span class="swatch" style="background: var(--series-{{ bez.color_index }})"></span><span>{{ bez.name }}</span></li>
+{% endfor %}
+</ul>
+<details>
+<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<table>
+<caption>
+<span lang="de">Verfügbare Räder je Bezirk und Uhrzeit (Mo-Fr)</span>
+<span lang="en">Bikes available by Bezirk and local hour (Mo-Fr)</span>
+</caption>
+<thead>
+<tr>
+<th scope="col">Bezirk</th>
+{% for hour in range(24) %}
+<th scope="col">{{ hour }}</th>
+{% endfor %}
+</tr>
+</thead>
+<tbody>
+{% for bez in bezirk_availability_chart.bezirke %}
+<tr>
+<th scope="row">{{ bez.name }}</th>
+{% for value in bez.hours %}
+<td>{{ "%.1f"|format(value) if value is not none else "–" }}</td>
+{% endfor %}
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</details>
+{% else %}
+<p class="not-enough-data">
+{{ bezirk_availability_chart.message }} ({{ bezirk_availability_chart.full_days }}/{{ min_full_days }})
+</p>
+{% endif %}
+</article>
 {% endblock %}

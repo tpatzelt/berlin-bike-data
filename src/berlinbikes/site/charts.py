@@ -12,6 +12,10 @@ palette (blue, orange, aqua, yellow, magenta, green, violet).
 ``shortage_chart`` draws the G4 8:00 morning-shortage headline and a
 horizontal bar chart of the top stations by empty minutes per day in the
 morning window, bars colored via ``--accent``.
+
+``bezirk_availability_chart`` draws the per-Bezirk availability-by-hour line
+chart (Mon-Fri only), one ``<polyline>`` per Bezirk sorted by name, colored
+via ``--series-1``..``--series-7`` (cycling if there are more than 7).
 """
 
 from __future__ import annotations
@@ -108,6 +112,85 @@ def availability_chart(data_dir: str | Path) -> AvailabilityChart:
         message=None,
         view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
         weekdays=weekdays,
+    )
+
+
+@dataclass(frozen=True)
+class BezirkSeries:
+    index: int
+    color_index: int
+    name: str
+    points: str
+    hours: list[float | None]
+
+
+@dataclass(frozen=True)
+class BezirkAvailabilityChart:
+    status: str
+    full_days: int
+    message: str | None
+    view_box: str
+    bezirke: list[BezirkSeries] | None
+
+
+def bezirk_availability_chart(data_dir: str | Path) -> BezirkAvailabilityChart:
+    """Mean bikes available by local hour per Bezirk, Mon-Fri only, hour 0-23.
+
+    Each Bezirk's hour value is the unweighted mean of its weekday (0-4)
+    values that exist for that hour; an hour with no weekday value for a
+    given Bezirk is left out of that Bezirk's polyline and shown as ``None``
+    (rendered as '--' by the template). Returns ``status="insufficient_data"``
+    with no ``bezirke`` below the 14-full-day minimum, same as
+    :func:`availability_by_hour` itself.
+    """
+    result = availability_by_hour(connect(data_dir), by="bezirk")
+    if result.status != "ok":
+        return BezirkAvailabilityChart(
+            status=result.status,
+            full_days=result.full_days,
+            message=result.message,
+            view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+            bezirke=None,
+        )
+
+    weekday_values: dict[tuple[str, int], list[float]] = {}
+    bezirk_names: set[str] = set()
+    for weekday, hour, bezirk, mean, _n in result.rows:
+        bezirk_names.add(bezirk)
+        if weekday <= 4:
+            weekday_values.setdefault((bezirk, hour), []).append(mean)
+
+    hour_means = {key: sum(values) / len(values) for key, values in weekday_values.items()}
+
+    all_values = list(hour_means.values())
+    y_min, y_max = (min(all_values), max(all_values)) if all_values else (0.0, 1.0)
+    y_span = (y_max - y_min) or 1.0
+
+    bezirke = []
+    for index, name in enumerate(sorted(bezirk_names)):
+        hours: list[float | None] = []
+        points_parts = []
+        for hour in range(24):
+            value = hour_means.get((name, hour))
+            hours.append(value)
+            if value is not None:
+                points_parts.append(f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}")
+        bezirke.append(
+            BezirkSeries(
+                index=index,
+                color_index=(index % 7) + 1,
+                name=name,
+                points=" ".join(points_parts),
+                hours=hours,
+            )
+        )
+
+    return BezirkAvailabilityChart(
+        status="ok",
+        full_days=result.full_days,
+        message=None,
+        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        bezirke=bezirke,
     )
 
 
