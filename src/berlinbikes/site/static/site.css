@@ -65,3 +65,13 @@ th, td { padding: 0.15rem 0.4rem; text-align: right; }
 @media (min-width: 600px) {
   header, main, footer { max-width: 600px; margin: 0 auto; }
 }
+
+.map { height: 55vh; min-height: 16rem; width: 100%; margin: 1rem 0; border: 1px solid var(--muted); }
+
+.map-controls { display: flex; flex-wrap: wrap; gap: 0 1.5rem; }
+
+.map-controls label { display: block; font-weight: 600; }
+
+.map-controls select { max-width: 100%; font: inherit; }
+
+.map-credit { font-size: 0.85rem; color: var(--muted); }

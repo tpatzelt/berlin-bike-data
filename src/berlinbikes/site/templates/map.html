@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Karte / Map – Wie Berlin radelt{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
+<script src="map.js" defer></script>
+{% endblock %}
+{% block content %}
+<section lang="de">
+<h2>Gibt es um 8 Uhr ein Rad an meiner Station?</h2>
+<p>Wähle eine Station (auf der Karte oder in der Liste) oder einen Ortsteil und einen Wochentag. Die Kurve zeigt, wie viele Räder dort typischerweise zu jeder Stunde verfügbar sind.</p>
+</section>
+<section lang="en">
+<h2>Will there be a bike at my station at 8:00?</h2>
+<p>Pick a station (on the map or from the list) or an Ortsteil, and a weekday. The curve shows how many bikes are typically available there at each hour.</p>
+</section>
+<noscript>
+<p class="not-enough-data">
+<span lang="de">Die Karte braucht JavaScript. Die Rohdaten gibt es als <a href="data/profiles.json">profiles.json</a>.</span>
+<span lang="en">The map needs JavaScript. The raw data is available as <a href="data/profiles.json">profiles.json</a>.</span>
+</p>
+</noscript>
+<p id="map-status" class="not-enough-data" hidden></p>
+<div id="map" class="map" aria-label="Karte der Stationen / Map of stations"></div>
+<form class="map-controls" onsubmit="return false">
+<p>
+<label for="pick-station"><span lang="de">Station</span> / <span lang="en">Station</span></label>
+<select id="pick-station"><option value="">–</option></select>
+</p>
+<p>
+<label for="pick-ortsteil"><span lang="de">Ortsteil</span> / <span lang="en">District</span></label>
+<select id="pick-ortsteil"><option value="">–</option></select>
+</p>
+<p>
+<label for="pick-weekday"><span lang="de">Wochentag</span> / <span lang="en">Weekday</span></label>
+<select id="pick-weekday">
+<option value="0" selected>Montag / Monday</option>
+<option value="1">Dienstag / Tuesday</option>
+<option value="2">Mittwoch / Wednesday</option>
+<option value="3">Donnerstag / Thursday</option>
+<option value="4">Freitag / Friday</option>
+<option value="5">Samstag / Saturday</option>
+<option value="6">Sonntag / Sunday</option>
+</select>
+</p>
+</form>
+<figure>
+<h3 id="profile-title"></h3>
+<svg id="profile-chart" class="chart" viewBox="0 0 480 200" role="img" aria-label="Verfügbare Räder je Stunde / Bikes available by hour"></svg>
+<figcaption>
+<span lang="de">Mittlere verfügbare Räder je Stunde (0–23 Uhr, Europe/Berlin).</span>
+<span lang="en">Mean bikes available by local hour (0–23, Europe/Berlin).</span>
+<span id="profile-days"></span>
+</figcaption>
+</figure>
+<details open>
+<summary><span lang="de">Werte als Tabelle</span><span lang="en">Values as a table</span></summary>
+<table id="profile-table">
+<caption><span lang="de">Verfügbare Räder je Stunde</span> / <span lang="en">Bikes available by hour</span></caption>
+<thead><tr><th scope="col"><span lang="de">Stunde</span> / <span lang="en">Hour</span></th><th scope="col"><span lang="de">Räder</span> / <span lang="en">Bikes</span></th></tr></thead>
+<tbody></tbody>
+</table>
+</details>
+<p class="map-credit"><span lang="de">Kartendaten</span> / <span lang="en">Map data</span> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></p>
+{% endblock %}
