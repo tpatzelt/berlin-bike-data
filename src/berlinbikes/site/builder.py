@@ -13,7 +13,12 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.weather_effect import COLD_C_THRESHOLD, RAIN_MM_THRESHOLD
-from berlinbikes.site.charts import availability_chart, bezirk_availability_chart, shortage_chart
+from berlinbikes.site.charts import (
+    availability_chart,
+    bezirk_availability_chart,
+    flow_chart,
+    shortage_chart,
+)
 from berlinbikes.site.sources import DATA_SOURCES
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -39,6 +44,7 @@ def build_site(data_dir: str | Path, site_dir: str | Path) -> list[Path]:
     context = {
         "availability_chart": availability_chart(Path(data_dir)),
         "bezirk_availability_chart": bezirk_availability_chart(Path(data_dir)),
+        "flow_chart": flow_chart(Path(data_dir)),
         "shortage_chart": shortage_chart(Path(data_dir)),
         "data_sources": DATA_SOURCES,
         "min_full_days": MIN_FULL_DAYS,
