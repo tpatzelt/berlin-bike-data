@@ -31,6 +31,11 @@ bucket: dry/warm) and ``--series-2`` (the active bucket: rainy/cold). The
 chart for the caption. A bucket with no rows at all (for example no rainy
 hours yet) is left out of the drawing and reported in ``missing_buckets``
 instead of crashing.
+
+``footprint_chart`` draws the G3 daily-footprint headline and a vertical
+stacked-bar chart, one bar per full day, of the e-bike/pedal/unknown split
+of bikes in the system that day, colored via ``--series-1`` (e-bike),
+``--series-2`` (pedal) and ``--series-3`` (unknown).
 """
 
 from __future__ import annotations
@@ -42,6 +47,7 @@ from berlinbikes.analysis.availability import availability_by_hour
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.empty import MORNING_WINDOW, morning_shortage
 from berlinbikes.analysis.flow import net_flow_by_bezirk
+from berlinbikes.analysis.footprint import daily_footprint
 from berlinbikes.analysis.weather_effect import weather_effect
 
 WEEKDAY_NAMES = (
@@ -535,4 +541,122 @@ def weather_effect_chart(data_dir: str | Path) -> WeatherEffectChart:
         message=None,
         rain=_weather_kind_chart("rain", rain_result.rows),
         temperature=_weather_kind_chart("temperature", temperature_result.rows),
+    )
+
+
+_FOOT_VIEW_WIDTH = 480
+_FOOT_VIEW_HEIGHT = 240
+_FOOT_PAD_LEFT = 36
+_FOOT_PAD_RIGHT = 10
+_FOOT_PAD_TOP = 10
+_FOOT_PAD_BOTTOM = 10
+_FOOT_BAR_GAP = 1
+
+
+@dataclass(frozen=True)
+class FootprintBar:
+    date: str
+    n_stations: int
+    bikes_at_stations: float
+    bikes_free_floating: float
+    ebikes: float
+    pedal_bikes: float
+    unknown_type: float
+    bar_x: float
+    bar_width: float
+    ebike_y: float
+    ebike_height: float
+    pedal_y: float
+    pedal_height: float
+    unknown_y: float
+    unknown_height: float
+
+
+@dataclass(frozen=True)
+class FootprintChart:
+    status: str
+    full_days: int
+    message: str | None
+    view_box: str
+    latest_date: str | None
+    latest_n_stations: int | None
+    latest_bikes_total: float | None
+    bars: list[FootprintBar] | None
+
+
+def footprint_chart(data_dir: str | Path) -> FootprintChart:
+    """The G3 daily-footprint headline and its stacked-bar-per-day chart.
+
+    Returns ``status="insufficient_data"`` with no ``bars`` below the
+    14-full-day minimum, same as :func:`daily_footprint` itself. Each bar
+    stacks ``mean_ebikes`` (bottom, ``--series-1``), ``mean_pedal_bikes``
+    (middle, ``--series-2``) and ``mean_unknown_type`` (top, ``--series-3``)
+    for one full local day; the headline uses the latest full day's
+    ``n_stations`` and that same three-way total.
+    """
+    result = daily_footprint(connect(data_dir))
+    if result.status != "ok":
+        return FootprintChart(
+            status=result.status,
+            full_days=result.full_days,
+            message=result.message,
+            view_box=f"0 0 {_FOOT_VIEW_WIDTH} {_FOOT_VIEW_HEIGHT}",
+            latest_date=None,
+            latest_n_stations=None,
+            latest_bikes_total=None,
+            bars=None,
+        )
+
+    rows = result.rows
+    totals = [ebikes + pedal_bikes + unknown for *_rest, ebikes, pedal_bikes, unknown in rows]
+    y_max = max(totals) if totals else 1.0
+    y_max = y_max or 1.0
+
+    plot_width = _FOOT_VIEW_WIDTH - _FOOT_PAD_LEFT - _FOOT_PAD_RIGHT
+    plot_height = _FOOT_VIEW_HEIGHT - _FOOT_PAD_TOP - _FOOT_PAD_BOTTOM
+    n = len(rows)
+    bar_width = (plot_width - (n - 1) * _FOOT_BAR_GAP) / n if n else 0.0
+    baseline_y = _FOOT_VIEW_HEIGHT - _FOOT_PAD_BOTTOM
+
+    bars = []
+    for i, (local_date, n_stations, bikes_at_stations, bikes_free_floating, ebikes, pedal_bikes, unknown) in enumerate(
+        rows
+    ):
+        scale = plot_height / y_max
+        ebike_height = ebikes * scale
+        pedal_height = pedal_bikes * scale
+        unknown_height = unknown * scale
+        ebike_y = baseline_y - ebike_height
+        pedal_y = ebike_y - pedal_height
+        unknown_y = pedal_y - unknown_height
+        bars.append(
+            FootprintBar(
+                date=local_date.isoformat(),
+                n_stations=n_stations,
+                bikes_at_stations=bikes_at_stations,
+                bikes_free_floating=bikes_free_floating,
+                ebikes=ebikes,
+                pedal_bikes=pedal_bikes,
+                unknown_type=unknown,
+                bar_x=_FOOT_PAD_LEFT + i * (bar_width + _FOOT_BAR_GAP),
+                bar_width=bar_width,
+                ebike_y=ebike_y,
+                ebike_height=ebike_height,
+                pedal_y=pedal_y,
+                pedal_height=pedal_height,
+                unknown_y=unknown_y,
+                unknown_height=unknown_height,
+            )
+        )
+
+    latest = bars[-1]
+    return FootprintChart(
+        status="ok",
+        full_days=result.full_days,
+        message=None,
+        view_box=f"0 0 {_FOOT_VIEW_WIDTH} {_FOOT_VIEW_HEIGHT}",
+        latest_date=latest.date,
+        latest_n_stations=latest.n_stations,
+        latest_bikes_total=latest.ebikes + latest.pedal_bikes + latest.unknown_type,
+        bars=bars,
     )
