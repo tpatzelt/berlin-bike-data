@@ -18,6 +18,7 @@ from berlinbikes.site.charts import (
     bezirk_availability_chart,
     flow_chart,
     shortage_chart,
+    weather_effect_chart,
 )
 from berlinbikes.site.sources import DATA_SOURCES
 
@@ -46,6 +47,7 @@ def build_site(data_dir: str | Path, site_dir: str | Path) -> list[Path]:
         "bezirk_availability_chart": bezirk_availability_chart(Path(data_dir)),
         "flow_chart": flow_chart(Path(data_dir)),
         "shortage_chart": shortage_chart(Path(data_dir)),
+        "weather_chart": weather_effect_chart(Path(data_dir)),
         "data_sources": DATA_SOURCES,
         "min_full_days": MIN_FULL_DAYS,
         "rain_mm_threshold": RAIN_MM_THRESHOLD,

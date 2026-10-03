@@ -20,6 +20,17 @@ via ``--series-1``..``--series-7`` (cycling if there are more than 7).
 ``flow_chart`` draws the per-Bezirk net-flow-by-hour line chart (weekday mean
 per day), one ``<polyline>`` per Bezirk sorted by name around a visible zero
 baseline, colored the same way as ``bezirk_availability_chart``.
+
+``weather_effect_chart`` draws the two G3-x-G2 rain and temperature small
+multiples: for each of ``weather_effect(con, "rain")`` and
+``weather_effect(con, "temperature")``, one ``<polyline>`` per bucket
+(``rainy``/``dry`` or ``cold``/``warm``) of ``empty_station_share`` (as a
+percentage) over local hours, colored via ``--series-1`` (the baseline
+bucket: dry/warm) and ``--series-2`` (the active bucket: rainy/cold). The
+``"excluded"`` row is never drawn, but its ``n_hours`` is surfaced on the
+chart for the caption. A bucket with no rows at all (for example no rainy
+hours yet) is left out of the drawing and reported in ``missing_buckets``
+instead of crashing.
 """
 
 from __future__ import annotations
@@ -31,6 +42,7 @@ from berlinbikes.analysis.availability import availability_by_hour
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.empty import MORNING_WINDOW, morning_shortage
 from berlinbikes.analysis.flow import net_flow_by_bezirk
+from berlinbikes.analysis.weather_effect import weather_effect
 
 WEEKDAY_NAMES = (
     ("Mo", "Mon"),
@@ -396,4 +408,131 @@ def shortage_chart(data_dir: str | Path) -> ShortageChart:
         view_box=f"0 0 {_BAR_VIEW_WIDTH} {_bar_view_height(len(bars))}",
         aria_label=aria_label,
         bars=bars,
+    )
+
+
+#: bilingual (de, en) label per weather_effect() bucket name.
+_WEATHER_BUCKET_LABELS: dict[str, tuple[str, str]] = {
+    "rainy": ("regnerisch", "rainy"),
+    "dry": ("trocken", "dry"),
+    "cold": ("kalt", "cold"),
+    "warm": ("warm", "warm"),
+}
+
+#: (active_bucket, other_bucket) per weather_effect() kind, same order as weather_effect.
+_WEATHER_KIND_BUCKETS: dict[str, tuple[str, str]] = {
+    "rain": ("rainy", "dry"),
+    "temperature": ("cold", "warm"),
+}
+
+
+@dataclass(frozen=True)
+class WeatherBucketSeries:
+    bucket: str
+    label_de: str
+    label_en: str
+    color_index: int
+    points: str
+    hours: list[float | None]
+
+
+@dataclass(frozen=True)
+class WeatherKindChart:
+    kind: str
+    view_box: str
+    excluded_n_hours: int
+    buckets: list[WeatherBucketSeries]
+    missing_buckets: list[tuple[str, str]]
+
+
+@dataclass(frozen=True)
+class WeatherEffectChart:
+    status: str
+    full_days: int
+    message: str | None
+    rain: WeatherKindChart | None
+    temperature: WeatherKindChart | None
+
+
+def _weather_kind_chart(kind: str, rows) -> WeatherKindChart:
+    active_bucket, other_bucket = _WEATHER_KIND_BUCKETS[kind]
+    by_bucket: dict[str, dict[int, float]] = {active_bucket: {}, other_bucket: {}}
+    excluded_n_hours = 0
+    for bucket, local_hour, _mean, share, _n_snapshots, n_hours in rows:
+        if bucket == "excluded":
+            excluded_n_hours = n_hours
+            continue
+        by_bucket[bucket][local_hour] = share * 100
+
+    all_values = [0.0] + [v for values in by_bucket.values() for v in values.values()]
+    y_min, y_max = min(all_values), max(all_values)
+    y_span = (y_max - y_min) or 1.0
+
+    buckets: list[WeatherBucketSeries] = []
+    missing_buckets: list[tuple[str, str]] = []
+    for index, bucket in enumerate((active_bucket, other_bucket)):
+        values = by_bucket[bucket]
+        label_de, label_en = _WEATHER_BUCKET_LABELS[bucket]
+        if not values:
+            missing_buckets.append((label_de, label_en))
+            continue
+        hours: list[float | None] = []
+        points_parts = []
+        for hour in range(24):
+            value = values.get(hour)
+            hours.append(value)
+            if value is not None:
+                points_parts.append(f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}")
+        buckets.append(
+            WeatherBucketSeries(
+                bucket=bucket,
+                label_de=label_de,
+                label_en=label_en,
+                color_index=index + 1,
+                points=" ".join(points_parts),
+                hours=hours,
+            )
+        )
+
+    return WeatherKindChart(
+        kind=kind,
+        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        excluded_n_hours=excluded_n_hours,
+        buckets=buckets,
+        missing_buckets=missing_buckets,
+    )
+
+
+def weather_effect_chart(data_dir: str | Path) -> WeatherEffectChart:
+    """Availability on rainy/dry and cold/warm hours, by local hour.
+
+    Returns ``status="insufficient_data"`` with no ``rain``/``temperature``
+    below the 14-full-day minimum, same as :func:`weather_effect` itself
+    (``kind="rain"`` and ``kind="temperature"`` share one day-count guard,
+    so their status and full_days always agree). When enough data exists,
+    each of ``rain``/``temperature`` carries its own two-bucket chart; a
+    bucket with no rows (for example no rainy hours yet, as when no weather
+    has been collected) is reported in that chart's ``missing_buckets``
+    instead of being drawn.
+    """
+    con = connect(data_dir)
+    rain_result = weather_effect(con, "rain")
+
+    if rain_result.status != "ok":
+        return WeatherEffectChart(
+            status=rain_result.status,
+            full_days=rain_result.full_days,
+            message=rain_result.message,
+            rain=None,
+            temperature=None,
+        )
+
+    temperature_result = weather_effect(con, "temperature")
+
+    return WeatherEffectChart(
+        status="ok",
+        full_days=rain_result.full_days,
+        message=None,
+        rain=_weather_kind_chart("rain", rain_result.rows),
+        temperature=_weather_kind_chart("temperature", temperature_result.rows),
     )
