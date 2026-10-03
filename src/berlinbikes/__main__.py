@@ -20,6 +20,7 @@ from berlinbikes.backoff import Clock, SystemClock
 from berlinbikes.collector import Collector
 from berlinbikes.config import Settings
 from berlinbikes.gbfs import GbfsClient
+from berlinbikes.site import build_site
 from berlinbikes.sources import enabled_sources
 from berlinbikes.storage import Storage
 from berlinbikes.weather import WeatherCache, WeatherClient
@@ -45,6 +46,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=7,
         help="How many days back from today to backfill (default: 7)",
+    )
+    subparsers.add_parser("build-site", help="Render the static site into BIKES_SITE_DIR")
+    nightly_parser = subparsers.add_parser(
+        "nightly", help="Fill missing weather, then rebuild the static site"
+    )
+    nightly_parser.add_argument(
+        "--days-back",
+        type=int,
+        default=7,
+        help="How many days back from today to backfill weather for (default: 7)",
     )
     return parser
 
@@ -145,6 +156,30 @@ def run_weather(
     return 1
 
 
+def run_build_site(settings: Settings) -> int:
+    """Render the static site from ``settings.data_dir`` into ``settings.site_dir``."""
+    written = build_site(settings.data_dir, settings.site_dir)
+    logger.info("site: wrote %d files to %s", len(written), settings.site_dir)
+    return 0
+
+
+def run_nightly(
+    settings: Settings,
+    clock: Clock,
+    days_back: int = 7,
+    transport: httpx.BaseTransport | None = None,
+) -> int:
+    """Fill missing weather, then always rebuild the site.
+
+    The site is rebuilt even when the weather backfill gives up, so a flaky
+    Bright Sky never blocks the nightly rebuild. A site build exception
+    propagates so ``main`` exits non-zero.
+    """
+    weather_result = run_weather(settings, clock, days_back=days_back, transport=transport)
+    run_build_site(settings)
+    return 1 if weather_result == 1 else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -155,6 +190,13 @@ def main(argv: list[str] | None = None) -> int:
         settings = Settings.from_env()
         clock = SystemClock()
         return run_weather(settings, clock, days_back=args.days_back)
+    if args.command == "build-site":
+        settings = Settings.from_env()
+        return run_build_site(settings)
+    if args.command == "nightly":
+        settings = Settings.from_env()
+        clock = SystemClock()
+        return run_nightly(settings, clock, days_back=args.days_back)
     return 0
 
 
