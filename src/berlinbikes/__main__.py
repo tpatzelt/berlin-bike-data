@@ -11,15 +11,18 @@ import logging
 import signal
 import sys
 import threading
+from pathlib import Path
 from types import FrameType
 from typing import Sequence
 
 import httpx
 
+from berlinbikes.areas import refresh_station_areas
 from berlinbikes.backoff import Clock, SystemClock
 from berlinbikes.collector import Collector
 from berlinbikes.config import Settings
 from berlinbikes.gbfs import GbfsClient
+from berlinbikes.serve import serve
 from berlinbikes.site import build_site
 from berlinbikes.sources import enabled_sources
 from berlinbikes.storage import Storage
@@ -57,6 +60,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=7,
         help="How many days back from today to backfill weather for (default: 7)",
     )
+    serve_parser = subparsers.add_parser(
+        "serve",
+        help="Run the collector, the nightly rebuild at 03:30 Europe/Berlin and the static site server",
+    )
+    serve_parser.add_argument("--port", type=int, default=8080, help="HTTP port (default: 8080)")
     return parser
 
 
@@ -131,6 +139,38 @@ def run_collect() -> None:
     run_sources(collectors, stop)
 
 
+def run_serve(port: int) -> None:
+    settings = Settings.from_env()
+    clock = SystemClock()
+    stop = threading.Event()
+
+    def _handle_signal(signum: int, frame: FrameType | None) -> None:
+        logger.info("received signal %s, stopping", signum)
+        stop.set()
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
+    Path(settings.site_dir).mkdir(parents=True, exist_ok=True)
+    threads = [
+        threading.Thread(
+            target=_supervise,
+            args=(collector, stop, RESTART_DELAY_S),
+            name=f"collector-{collector.source.name}",
+        )
+        for collector in build_collectors(settings, clock)
+    ]
+    serve(
+        settings.site_dir,
+        threads,
+        initial_build=lambda: run_build_site(settings),
+        nightly=lambda: run_nightly(settings, clock),
+        now=clock.now,
+        stop=stop,
+        port=port,
+    )
+
+
 def run_weather(
     settings: Settings,
     clock: Clock,
@@ -157,8 +197,14 @@ def run_weather(
 
 
 def run_build_site(settings: Settings) -> int:
-    """Render the static site from ``settings.data_dir`` into ``settings.site_dir``."""
-    written = build_site(settings.data_dir, settings.site_dir)
+    """Map stations to Bezirk/Ortsteil, then render the site from
+    ``settings.data_dir`` into ``settings.site_dir``.
+    """
+    problems = refresh_station_areas(settings.data_dir)
+    if problems:
+        logger.warning("areas: %d station(s) outside the Berlin polygons, left out of area metrics", len(problems))
+    operator = {"name": settings.operator_name, "address": settings.operator_address, "email": settings.operator_email}
+    written = build_site(settings.data_dir, settings.site_dir, operator)
     logger.info("site: wrote %d files to %s", len(written), settings.site_dir)
     return 0
 
@@ -186,6 +232,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "collect":
         run_collect()
         return 0
+    if args.command == "serve":
+        run_serve(args.port)
+        return 0
     if args.command == "weather":
         settings = Settings.from_env()
         clock = SystemClock()
@@ -201,4 +250,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # berlinbikes.gbfs already logs one line per fetch; httpx's own line per request is noise.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     sys.exit(main())

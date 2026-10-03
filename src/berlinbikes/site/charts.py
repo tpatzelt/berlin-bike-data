@@ -355,12 +355,13 @@ def shortage_chart(data_dir: str | Path) -> ShortageChart:
     """The G4 8:00 morning-shortage headline and its top-stations bar chart.
 
     Returns ``status="insufficient_data"`` with no ``bars`` below the
-    14-full-day minimum, same as :func:`morning_shortage` itself. When
-    enough data exists but no snapshot lands on exactly local 08:00:00 (as
-    on real, non-synthetic data), ``morning_shortage`` reports
+    14-full-day minimum, same as :func:`morning_shortage` itself. The
+    headline share comes from each weekday's latest snapshot in local
+    [07:50, 08:00]. When no weekday has one (for example after a collector
+    outage over that window every day), ``morning_shortage`` reports
     ``share_empty_at_0800=None``; this is rendered as ``share_pct=None`` so
-    the headline sentence is left out, while the bar chart and table (which
-    do not depend on the exact-08:00 match) still render.
+    the headline sentence is left out, while the bar chart and table still
+    render.
     """
     result = morning_shortage(connect(data_dir))
     de_label, en_label = _window_label(MORNING_WINDOW)

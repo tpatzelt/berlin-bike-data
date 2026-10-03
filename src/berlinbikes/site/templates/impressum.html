@@ -3,11 +3,17 @@
 {% block content %}
 <section lang="de">
 <h2>Impressum</h2>
-<p>Angaben gemäß § 5 TMG</p>
+<p>Angaben gemäß § 5 DDG</p>
 <address>
-[NAME]<br>
-[ANSCHRIFT]<br>
-[E-MAIL]
+{{ operator.name }}<br>
+{{ operator.address }}<br>
+<a href="mailto:{{ operator.email }}">{{ operator.email }}</a>
 </address>
+<p>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV: {{ operator.name }}, Anschrift wie oben.</p>
+<p>Dies ist ein privates, nicht-kommerzielles Projekt. Es besteht keine Verbindung zu nextbike, Dott oder dem Land Berlin.</p>
+</section>
+<section lang="en">
+<h2>Legal notice</h2>
+<p>A private, non-commercial project, not affiliated with nextbike, Dott or the State of Berlin. Contact details above.</p>
 </section>
 {% endblock %}

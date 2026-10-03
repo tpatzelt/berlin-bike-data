@@ -1,0 +1,23 @@
+# Wie Berlin radelt (github.com/tpatzelt/berlin-bike-data): nextbike snapshot
+# collector, nightly site rebuild and static file server in one container.
+# Copy to the homelab as compose/bikes/compose.yaml; see DEPLOY.md.
+services:
+  bikes:
+    # Rolling tag published by this repo's CI. To roll back, pin sha-<short>.
+    image: ghcr.io/tpatzelt/berlin-bike-data:latest
+    container_name: bikes
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      # Paths inside the container; these win over anything in .env.
+      BIKES_DATA_DIR: /data/parquet
+      BIKES_SITE_DIR: /data/site
+    volumes:
+      - /opt/dockerdata/bikes:/data
+    networks:
+      - caddy_network
+
+networks:
+  caddy_network:
+    external: true
+    name: caddy_network

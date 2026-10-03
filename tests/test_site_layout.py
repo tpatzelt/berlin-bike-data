@@ -99,7 +99,7 @@ def test_pages_have_viewport_meta_and_lang(empty_site, page):
 @pytest.mark.parametrize("page", PAGES)
 def test_footer_links_resolve_to_generated_files(empty_site, page):
     parsed = _parse((empty_site / page).read_text())
-    local_hrefs = [href for href in parsed.hrefs if not href.startswith("http")]
+    local_hrefs = [href for href in parsed.hrefs if not href.startswith(("http", "mailto:"))]
     assert set(local_hrefs) >= set(PAGES)
     for href in local_hrefs:
         assert (empty_site / href).exists(), href

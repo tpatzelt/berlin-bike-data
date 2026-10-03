@@ -1,14 +1,11 @@
 """Tests for the G4 article's 8:00 morning-shortage section (charts.shortage_chart).
 
-Covers the reviewer-required fix: ``morning_shortage()``'s
-``share_empty_at_0800`` is ``None`` whenever no snapshot lands on exactly
-local 08:00:00 (always true on real data, since the collector's
-``snapshot_ts`` comes from the feed's ``last_updated`` and has arbitrary
-seconds -- see ``collector.py``). Before the fix, ``shortage_chart()``
-computed ``round(None * 100, 1)`` and crashed the whole nightly
-``build_site()``. The fix must drop the headline sentence in that case
-while still rendering the bar chart and table, which do not depend on the
-exact-08:00 match.
+``morning_shortage()``'s ``share_empty_at_0800`` comes from each weekday's
+latest snapshot in local [07:50, 08:00] (T-0059) and is ``None`` when no
+weekday has one. ``shortage_chart()`` once computed ``round(None * 100, 1)``
+in that case and crashed the whole nightly ``build_site()``; it must drop
+the headline sentence instead while still rendering the bar chart and
+table.
 """
 
 from __future__ import annotations

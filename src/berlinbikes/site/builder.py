@@ -21,15 +21,19 @@ from berlinbikes.site.charts import (
     shortage_chart,
     weather_effect_chart,
 )
+from berlinbikes.site.profiles import write_profiles_json
 from berlinbikes.site.sources import DATA_SOURCES
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
 
-PAGES = ("index.html", "methodology.html", "impressum.html", "datenschutz.html")
+PAGES = ("index.html", "map.html", "methodology.html", "impressum.html", "datenschutz.html")
 
 
-def build_site(data_dir: str | Path, site_dir: str | Path) -> list[Path]:
+DEFAULT_OPERATOR = {"name": "[NAME]", "address": "[ANSCHRIFT]", "email": "[E-MAIL]"}
+
+
+def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, str] | None = None) -> list[Path]:
     """Render ``PAGES`` and copy static assets into ``site_dir``.
 
     Writes only under ``site_dir``; never touches the repository.
@@ -54,6 +58,7 @@ def build_site(data_dir: str | Path, site_dir: str | Path) -> list[Path]:
         "min_full_days": MIN_FULL_DAYS,
         "rain_mm_threshold": RAIN_MM_THRESHOLD,
         "cold_c_threshold": COLD_C_THRESHOLD,
+        "operator": operator or DEFAULT_OPERATOR,
     }
 
     written = []
@@ -62,8 +67,11 @@ def build_site(data_dir: str | Path, site_dir: str | Path) -> list[Path]:
         out_path.write_text(env.get_template(page).render(**context))
         written.append(out_path)
 
-    css_dst = site_dir / "site.css"
-    css_dst.write_text((_STATIC_DIR / "site.css").read_text())
-    written.append(css_dst)
+    for asset in ("site.css", "map.js"):
+        asset_dst = site_dir / asset
+        asset_dst.write_text((_STATIC_DIR / asset).read_text())
+        written.append(asset_dst)
+
+    written.append(write_profiles_json(data_dir, site_dir))
 
     return written

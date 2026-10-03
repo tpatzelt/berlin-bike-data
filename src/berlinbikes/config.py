@@ -47,6 +47,11 @@ class Settings:
     nextbike_gbfs_url: str
     dott_enabled: bool
     dott_gbfs_url: str
+    # Impressum / Datenschutz details. Kept out of the repository; the
+    # placeholders render when they are unset.
+    operator_name: str = "[NAME]"
+    operator_address: str = "[ANSCHRIFT]"
+    operator_email: str = "[E-MAIL]"
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> "Settings":
@@ -59,4 +64,7 @@ class Settings:
             ),
             dott_enabled=_optional_bool(environ, "BIKES_DOTT_ENABLED", False),
             dott_gbfs_url=_optional(environ, "BIKES_DOTT_GBFS_URL", DEFAULT_DOTT_GBFS_URL),
+            operator_name=_optional(environ, "BIKES_OPERATOR_NAME", "[NAME]"),
+            operator_address=_optional(environ, "BIKES_OPERATOR_ADDRESS", "[ANSCHRIFT]"),
+            operator_email=_optional(environ, "BIKES_OPERATOR_EMAIL", "[E-MAIL]"),
         )
