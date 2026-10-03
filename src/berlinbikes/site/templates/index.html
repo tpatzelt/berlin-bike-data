@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Wie Berlin radelt{% endblock %}
+{% block content %}
+{% if has_data %}
+<article>
+<section lang="de">
+<h2>Verfügbarkeit in Berlin</h2>
+<p>Die Auswertung der gesammelten Daten folgt in Kürze an dieser Stelle.</p>
+</section>
+<section lang="en">
+<h2>Availability in Berlin</h2>
+<p>The analysis of the collected data will appear here soon.</p>
+</section>
+</article>
+{% else %}
+<p class="not-enough-data">
+<span lang="de">Noch nicht genug Daten.</span>
+<span lang="en">Not enough data yet.</span>
+</p>
+{% endif %}
+{% endblock %}
