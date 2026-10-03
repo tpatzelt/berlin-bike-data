@@ -19,6 +19,7 @@ import duckdb
 import pyarrow as pa
 
 from berlinbikes.schemas import SCHEMAS
+from berlinbikes.weather import WEATHER_SCHEMA
 
 _DATASETS = ("station_status", "station_information", "vehicle_types", "free_bike_cells", "gaps")
 
@@ -54,6 +55,10 @@ def connect(data_dir: str | Path, source: str = "nextbike_bn") -> duckdb.DuckDBP
         pattern = data_dir / source / dataset / "date=*" / "*.parquet"
         empty_schema = SCHEMAS[dataset].append(pa.field("date", pa.date32()))
         _create_parquet_view(con, dataset, pattern, empty_schema)
+
+    weather_pattern = data_dir / "weather" / "date=*" / "*.parquet"
+    weather_empty_schema = WEATHER_SCHEMA.append(pa.field("date", pa.date32()))
+    _create_parquet_view(con, "weather", weather_pattern, weather_empty_schema)
 
     areas_path = data_dir / "areas" / "station_areas.parquet"
     if areas_path.is_file():
