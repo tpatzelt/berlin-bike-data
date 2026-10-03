@@ -189,12 +189,24 @@ snapshot_local AS (
         CAST(isodow(snapshot_ts AT TIME ZONE 'Europe/Berlin') AS INTEGER) - 1 AS local_weekday
     FROM station_status
 ),
-at_0800 AS (
+candidates AS (
     SELECT *
     FROM snapshot_local
     WHERE local_date IN (SELECT local_date FROM full_days_cte)
       AND local_weekday IN (0, 1, 2, 3, 4)
-      AND local_time = TIME '08:00:00'
+      AND local_time >= TIME '07:50:00'
+      AND local_time <= TIME '08:00:00'
+),
+latest_per_day AS (
+    SELECT source, local_date, MAX(snapshot_ts) AS latest_ts
+    FROM candidates
+    GROUP BY source, local_date
+),
+at_0800 AS (
+    SELECT c.*
+    FROM candidates AS c
+    JOIN latest_per_day AS l
+      ON c.source = l.source AND c.local_date = l.local_date AND c.snapshot_ts = l.latest_ts
 ),
 per_snapshot AS (
     SELECT
@@ -218,9 +230,13 @@ def morning_shortage(con: duckdb.DuckDBPyConnection) -> MetricResult:
     :func:`empty_minutes_by_station`/:func:`empty_minutes_by_ortsteil`
     rankings for :data:`MORNING_WINDOW`) and ``'share_empty_at_0800'``: the
     mean, over weekday full days, of (installed stations with 0 bikes at
-    the local 08:00 snapshot) / (installed stations at that snapshot).
-    Below the 14-full-day minimum, returns the guard's ``insufficient_data``
-    result.
+    the day's 08:00 snapshot) / (installed stations at that snapshot).
+    Real snapshot timestamps rarely land on an exact local 08:00:00, so
+    "the 08:00 snapshot" is the latest snapshot whose local time falls in
+    ``[07:50:00, 08:00:00]``; a day without one in that window is skipped
+    rather than counted as zero. ``share_empty_at_0800`` is ``None`` when no
+    day has a qualifying snapshot. Below the 14-full-day minimum, returns
+    the guard's ``insufficient_data`` result.
     """
     days = full_days(con)
     n_days = len(days)
