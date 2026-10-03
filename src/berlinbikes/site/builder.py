@@ -13,16 +13,13 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.weather_effect import COLD_C_THRESHOLD, RAIN_MM_THRESHOLD
+from berlinbikes.site.charts import availability_chart
 from berlinbikes.site.sources import DATA_SOURCES
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
 
 PAGES = ("index.html", "methodology.html", "impressum.html", "datenschutz.html")
-
-
-def _has_data(data_dir: Path) -> bool:
-    return next(data_dir.rglob("*.parquet"), None) is not None
 
 
 def build_site(data_dir: str | Path, site_dir: str | Path) -> list[Path]:
@@ -40,7 +37,7 @@ def build_site(data_dir: str | Path, site_dir: str | Path) -> list[Path]:
         lstrip_blocks=True,
     )
     context = {
-        "has_data": _has_data(Path(data_dir)),
+        "availability_chart": availability_chart(Path(data_dir)),
         "data_sources": DATA_SOURCES,
         "min_full_days": MIN_FULL_DAYS,
         "rain_mm_threshold": RAIN_MM_THRESHOLD,

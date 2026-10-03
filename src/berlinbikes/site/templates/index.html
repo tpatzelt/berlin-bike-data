@@ -1,21 +1,64 @@
 {% extends "base.html" %}
 {% block title %}Wie Berlin radelt{% endblock %}
 {% block content %}
-{% if has_data %}
 <article>
 <section lang="de">
 <h2>Verfügbarkeit in Berlin</h2>
-<p>Die Auswertung der gesammelten Daten folgt in Kürze an dieser Stelle.</p>
+<p>Mittlere Anzahl verfügbarer Räder in Berlin, je Wochentag und Uhrzeit (Europe/Berlin).</p>
 </section>
 <section lang="en">
 <h2>Availability in Berlin</h2>
-<p>The analysis of the collected data will appear here soon.</p>
+<p>Mean number of bikes available citywide, by weekday and local hour (Europe/Berlin).</p>
 </section>
-</article>
+{% if availability_chart.status == "ok" %}
+<figure>
+<svg viewBox="{{ availability_chart.view_box }}" role="img" class="chart"
+     aria-label="Mittlere Anzahl verfügbarer Räder in Berlin je Wochentag und Uhrzeit (0-23 Uhr, Europe/Berlin) / Mean bikes available in Berlin by weekday and local hour (0-23, Europe/Berlin)">
+{% for wd in availability_chart.weekdays %}
+<polyline points="{{ wd.points }}" fill="none" stroke="var(--series-{{ wd.index + 1 }})" stroke-width="2"></polyline>
+{% endfor %}
+</svg>
+<figcaption>
+<span lang="de">Verfügbare Räder je Uhrzeit (0–23 Uhr, Europe/Berlin) und Wochentag (Mo–So), auf Basis von {{ availability_chart.full_days }} vollen Tagen.</span>
+<span lang="en">Bikes available by local hour (0–23, Europe/Berlin) and weekday (Mon–Sun), based on {{ availability_chart.full_days }} full days.</span>
+</figcaption>
+</figure>
+<ul class="chart-legend">
+{% for wd in availability_chart.weekdays %}
+<li><span class="swatch" style="background: var(--series-{{ wd.index + 1 }})"></span><span lang="de">{{ wd.name_de }}</span><span lang="en">{{ wd.name_en }}</span></li>
+{% endfor %}
+</ul>
+<details>
+<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<table>
+<caption>
+<span lang="de">Verfügbare Räder je Wochentag und Uhrzeit</span>
+<span lang="en">Bikes available by weekday and local hour</span>
+</caption>
+<thead>
+<tr>
+<th scope="col"><span lang="de">Tag</span><span lang="en">Day</span></th>
+{% for hour in range(24) %}
+<th scope="col">{{ hour }}</th>
+{% endfor %}
+</tr>
+</thead>
+<tbody>
+{% for wd in availability_chart.weekdays %}
+<tr>
+<th scope="row"><span lang="de">{{ wd.name_de }}</span><span lang="en">{{ wd.name_en }}</span></th>
+{% for value in wd.hours %}
+<td>{{ "%.1f"|format(value) }}</td>
+{% endfor %}
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</details>
 {% else %}
 <p class="not-enough-data">
-<span lang="de">Noch nicht genug Daten.</span>
-<span lang="en">Not enough data yet.</span>
+{{ availability_chart.message }} ({{ availability_chart.full_days }}/{{ min_full_days }})
 </p>
 {% endif %}
+</article>
 {% endblock %}
