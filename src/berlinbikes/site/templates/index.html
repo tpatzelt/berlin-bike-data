@@ -310,4 +310,76 @@
 </p>
 {% endif %}
 </article>
+<article>
+<section lang="de">
+<h2>Der tägliche Fußabdruck des Systems</h2>
+{% if footprint_chart.status == "ok" %}
+<p>Am {{ footprint_chart.latest_date }} gab es {{ footprint_chart.latest_n_stations }} Stationen und rund {{ "%.0f"|format(footprint_chart.latest_bikes_total) }} Räder im System.</p>
+{% endif %}
+</section>
+<section lang="en">
+<h2>The system's daily footprint</h2>
+{% if footprint_chart.status == "ok" %}
+<p>On {{ footprint_chart.latest_date }}, there were {{ footprint_chart.latest_n_stations }} stations and about {{ "%.0f"|format(footprint_chart.latest_bikes_total) }} bikes in the system.</p>
+{% endif %}
+</section>
+{% if footprint_chart.status == "ok" %}
+<figure>
+<svg viewBox="{{ footprint_chart.view_box }}" role="img" class="chart footprint"
+     aria-label="Räder im System je Tag, E-Bike/Pedal/unbekannt, auf Basis von {{ footprint_chart.full_days }} vollen Tagen / Bikes in the system per day, e-bike/pedal/unknown, based on {{ footprint_chart.full_days }} full days">
+{% for bar in footprint_chart.bars %}
+<rect x="{{ bar.bar_x }}" y="{{ bar.ebike_y }}" width="{{ bar.bar_width }}" height="{{ bar.ebike_height }}" fill="var(--series-1)"></rect>
+<rect x="{{ bar.bar_x }}" y="{{ bar.pedal_y }}" width="{{ bar.bar_width }}" height="{{ bar.pedal_height }}" fill="var(--series-2)"></rect>
+<rect x="{{ bar.bar_x }}" y="{{ bar.unknown_y }}" width="{{ bar.bar_width }}" height="{{ bar.unknown_height }}" fill="var(--series-3)"></rect>
+{% endfor %}
+</svg>
+<figcaption>
+<span lang="de">Räder im System je vollem Tag, aufgeteilt in E-Bike, Pedal und unbekannt, auf Basis von {{ footprint_chart.full_days }} vollen Tagen.</span>
+<span lang="en">Bikes in the system per full day, split into e-bike, pedal and unknown, based on {{ footprint_chart.full_days }} full days.</span>
+</figcaption>
+</figure>
+<ul class="chart-legend">
+<li><span class="swatch" style="background: var(--series-1)"></span><span lang="de">E-Bike</span><span lang="en">e-bike</span></li>
+<li><span class="swatch" style="background: var(--series-2)"></span><span lang="de">Pedal</span><span lang="en">pedal</span></li>
+<li><span class="swatch" style="background: var(--series-3)"></span><span lang="de">unbekannt</span><span lang="en">unknown</span></li>
+</ul>
+<details>
+<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<table>
+<caption>
+<span lang="de">Täglicher Fußabdruck des Systems</span>
+<span lang="en">System's daily footprint</span>
+</caption>
+<thead>
+<tr>
+<th scope="col"><span lang="de">Datum</span><span lang="en">Date</span></th>
+<th scope="col"><span lang="de">Stationen</span><span lang="en">Stations</span></th>
+<th scope="col"><span lang="de">Räder an Stationen</span><span lang="en">Bikes at stations</span></th>
+<th scope="col"><span lang="de">Free-floating</span><span lang="en">Free-floating</span></th>
+<th scope="col"><span lang="de">E-Bike</span><span lang="en">E-bike</span></th>
+<th scope="col"><span lang="de">Pedal</span><span lang="en">Pedal</span></th>
+<th scope="col"><span lang="de">Unbekannt</span><span lang="en">Unknown</span></th>
+</tr>
+</thead>
+<tbody>
+{% for bar in footprint_chart.bars %}
+<tr>
+<th scope="row">{{ bar.date }}</th>
+<td>{{ bar.n_stations }}</td>
+<td>{{ "%.1f"|format(bar.bikes_at_stations) }}</td>
+<td>{{ "%.1f"|format(bar.bikes_free_floating) }}</td>
+<td>{{ "%.1f"|format(bar.ebikes) }}</td>
+<td>{{ "%.1f"|format(bar.pedal_bikes) }}</td>
+<td>{{ "%.1f"|format(bar.unknown_type) }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</details>
+{% else %}
+<p class="not-enough-data">
+{{ footprint_chart.message }} ({{ footprint_chart.full_days }}/{{ min_full_days }})
+</p>
+{% endif %}
+</article>
 {% endblock %}
