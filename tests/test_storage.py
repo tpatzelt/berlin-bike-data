@@ -284,6 +284,48 @@ def test_latest_gap_end_reads_across_the_two_newest_partitions(tmp_path):
     assert store.latest_gap_end(SOURCE, "station_status") == gap_start + timedelta(minutes=10)
 
 
+def test_duplicate_check_does_not_read_existing_part_files(tmp_path, monkeypatch):
+    store = Storage(tmp_path)
+    base_ts = _ts(2024, 5, 1, 12, 0, 0)
+    for i in range(20):
+        store.write(
+            "station_status", SOURCE, _station_status_table(base_ts + timedelta(seconds=i))
+        )
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("read_table must not be called for the duplicate check")
+
+    monkeypatch.setattr("berlinbikes.storage.pq.read_table", _boom)
+
+    new_ts = base_ts + timedelta(seconds=20)
+    path = store.write("station_status", SOURCE, _station_status_table(new_ts))
+    assert path.is_file()
+
+    with pytest.raises(DuplicateSnapshotError):
+        store.write("station_status", SOURCE, _station_status_table(base_ts))
+
+
+def test_gaps_duplicate_check_does_not_read_existing_part_files(tmp_path, monkeypatch):
+    store = Storage(tmp_path)
+    base_start = _ts(2024, 5, 1, 12, 0, 0)
+    for i in range(20):
+        store.write(
+            "gaps", SOURCE, _gaps_table(base_start + timedelta(minutes=i))
+        )
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("read_table must not be called for the duplicate check")
+
+    monkeypatch.setattr("berlinbikes.storage.pq.read_table", _boom)
+
+    new_start = base_start + timedelta(minutes=20)
+    path = store.write("gaps", SOURCE, _gaps_table(new_start))
+    assert path.is_file()
+
+    with pytest.raises(DuplicateSnapshotError):
+        store.write("gaps", SOURCE, _gaps_table(base_start))
+
+
 def test_utc_partitioning_near_midnight_uses_real_berlin_offset_not_a_fixed_one(tmp_path):
     store = Storage(tmp_path)
     berlin = ZoneInfo("Europe/Berlin")
