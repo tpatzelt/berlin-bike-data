@@ -9,9 +9,12 @@ from __future__ import annotations
 import argparse
 import logging
 import signal
+import sys
 import threading
 from types import FrameType
 from typing import Sequence
+
+import httpx
 
 from berlinbikes.backoff import Clock, SystemClock
 from berlinbikes.collector import Collector
@@ -19,6 +22,7 @@ from berlinbikes.config import Settings
 from berlinbikes.gbfs import GbfsClient
 from berlinbikes.sources import enabled_sources
 from berlinbikes.storage import Storage
+from berlinbikes.weather import WeatherCache, WeatherClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +37,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="berlinbikes")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("collect", help="Run the snapshot collector loop")
+    weather_parser = subparsers.add_parser(
+        "weather", help="Fill missing Bright Sky weather days into the cache"
+    )
+    weather_parser.add_argument(
+        "--days-back",
+        type=int,
+        default=7,
+        help="How many days back from today to backfill (default: 7)",
+    )
     return parser
 
 
@@ -107,12 +120,43 @@ def run_collect() -> None:
     run_sources(collectors, stop)
 
 
-def main(argv: list[str] | None = None) -> None:
+def run_weather(
+    settings: Settings,
+    clock: Clock,
+    days_back: int = 7,
+    transport: httpx.BaseTransport | None = None,
+    max_rounds: int = 5,
+) -> int:
+    """Fill missing days into the weather cache, retrying with backoff.
+
+    Each round calls ``WeatherCache.collect_missing``, which returns ``None``
+    once every day in range is cached, or a delay to sleep (via ``clock``)
+    before the next round. After ``max_rounds`` rounds without catching up,
+    this gives up and returns 1 so the nightly rebuild can flag it.
+    """
+    client = WeatherClient(settings.user_agent, transport=transport, clock=clock)
+    cache = WeatherCache(settings.data_dir, client, clock)
+    for _ in range(max_rounds):
+        delay = cache.collect_missing(days_back)
+        if delay is None:
+            return 0
+        clock.sleep(delay)
+    logger.warning("weather: giving up after %d rounds, cache still incomplete", max_rounds)
+    return 1
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "collect":
         run_collect()
+        return 0
+    if args.command == "weather":
+        settings = Settings.from_env()
+        clock = SystemClock()
+        return run_weather(settings, clock, days_back=args.days_back)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
