@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Snapshot collector and availability analysis for Berlin bike-share systems"
 requires-python = ">=3.12"
 dependencies = [
+    "duckdb>=1.5.6",
     "h3>=4.5.0",
     "httpx>=0.28.1",
     "pyarrow>=25.0.1",
