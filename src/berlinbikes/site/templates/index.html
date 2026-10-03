@@ -240,4 +240,74 @@
 </p>
 {% endif %}
 </article>
+<article>
+<section lang="de">
+<h2>Verfügbarkeit bei Regen und Kälte</h2>
+<p>Anteil leerer Stationen je Uhrzeit, bei Regen (&ge; {{ "%.1f"|format(rain_mm_threshold) }} mm/h) im Vergleich zu trocken, und bei Kälte (&lt; {{ "%.1f"|format(cold_c_threshold) }} °C) im Vergleich zu warm (Europe/Berlin).</p>
+</section>
+<section lang="en">
+<h2>Availability on rainy and cold hours</h2>
+<p>Share of empty stations by local hour, rainy (&ge; {{ "%.1f"|format(rain_mm_threshold) }} mm/h) versus dry, and cold (&lt; {{ "%.1f"|format(cold_c_threshold) }} &deg;C) versus warm (Europe/Berlin).</p>
+</section>
+{% if weather_chart.status == "ok" %}
+{% for kind_chart, cap_de, cap_en in [(weather_chart.rain, "Regen", "rain"), (weather_chart.temperature, "Kälte", "temperature")] %}
+{% if kind_chart.buckets %}
+<figure>
+<svg viewBox="{{ kind_chart.view_box }}" role="img" class="chart weather" data-kind="{{ kind_chart.kind }}"
+     aria-label="Anteil leerer Stationen je Uhrzeit (0-23 Uhr, Europe/Berlin), {{ cap_de }} / Share of empty stations by local hour (0-23, Europe/Berlin), {{ cap_en }}">
+{% for bucket in kind_chart.buckets %}
+<polyline points="{{ bucket.points }}" fill="none" stroke="var(--series-{{ bucket.color_index }})" stroke-width="2"></polyline>
+{% endfor %}
+</svg>
+<figcaption>
+<span lang="de">Anteil leerer Stationen (%) je Uhrzeit (0–23 Uhr, Europe/Berlin), {{ cap_de }}, auf Basis von {{ weather_chart.full_days }} vollen Tagen; {{ kind_chart.excluded_n_hours }} Stunden ohne Wetterdaten ausgeschlossen.</span>
+<span lang="en">Share of empty stations (%) by local hour (0–23, Europe/Berlin), {{ cap_en }}, based on {{ weather_chart.full_days }} full days; {{ kind_chart.excluded_n_hours }} hours excluded for missing weather.</span>
+</figcaption>
+</figure>
+<ul class="chart-legend">
+{% for bucket in kind_chart.buckets %}
+<li><span class="swatch" style="background: var(--series-{{ bucket.color_index }})"></span><span lang="de">{{ bucket.label_de }}</span><span lang="en">{{ bucket.label_en }}</span></li>
+{% endfor %}
+</ul>
+<details>
+<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<table>
+<caption>
+<span lang="de">Anteil leerer Stationen je Uhrzeit, {{ cap_de }}</span>
+<span lang="en">Share of empty stations by local hour, {{ cap_en }}</span>
+</caption>
+<thead>
+<tr>
+<th scope="col"><span lang="de">Zustand</span><span lang="en">Bucket</span></th>
+{% for hour in range(24) %}
+<th scope="col">{{ hour }}</th>
+{% endfor %}
+</tr>
+</thead>
+<tbody>
+{% for bucket in kind_chart.buckets %}
+<tr>
+<th scope="row"><span lang="de">{{ bucket.label_de }}</span><span lang="en">{{ bucket.label_en }}</span></th>
+{% for value in bucket.hours %}
+<td>{{ "%.1f"|format(value) if value is not none else "–" }}</td>
+{% endfor %}
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</details>
+{% endif %}
+{% for label_de, label_en in kind_chart.missing_buckets %}
+<p class="not-enough-data">
+<span lang="de">Für „{{ label_de }}“ liegen noch keine Stunden vor.</span>
+<span lang="en">No hours classified as “{{ label_en }}” yet.</span>
+</p>
+{% endfor %}
+{% endfor %}
+{% else %}
+<p class="not-enough-data">
+{{ weather_chart.message }} ({{ weather_chart.full_days }}/{{ min_full_days }})
+</p>
+{% endif %}
+</article>
 {% endblock %}
