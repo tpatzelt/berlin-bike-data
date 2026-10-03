@@ -45,8 +45,8 @@ DATA_SOURCES: tuple[DataSource, ...] = (
     ),
     DataSource(
         name="Berlin Bezirk/Ortsteil polygons",
-        url="Berlin open data (GeoJSON not yet fetched; see data/SOURCES.md)",
-        license="pending",
+        url="https://gdi.berlin.de/services/wfs/alkis_ortsteile (Geoportal Berlin, ALKIS Bezirke and Ortsteile)",
+        license="Datenlizenz Deutschland - Zero - Version 2.0 (dl-de/zero-2-0)",
         used_for="mapping stations and grid cells to Bezirk and Ortsteil (G2)",
     ),
     DataSource(

@@ -86,8 +86,20 @@ def load_areas(path: str | Path, name_property: str) -> list[Area]:
     ]
 
 
-def _matching_names(lat: float, lon: float, areas: Iterable[Area]) -> list[str]:
-    return [area.name for area in areas if point_in_geometry(lon, lat, area.geometry)]
+def _bbox(geometry: dict) -> tuple[float, float, float, float]:
+    polygons = [geometry["coordinates"]] if geometry["type"] == "Polygon" else geometry["coordinates"]
+    lons = [p[0] for polygon in polygons for p in polygon[0]]
+    lats = [p[1] for polygon in polygons for p in polygon[0]]
+    return min(lons), min(lats), max(lons), max(lats)
+
+
+def _matching_names(lat: float, lon: float, areas: Iterable[tuple[Area, tuple[float, float, float, float]]]) -> list[str]:
+    # Cheap bounding-box reject first: real Ortsteil rings have thousands of vertices.
+    return [
+        area.name
+        for area, (min_lon, min_lat, max_lon, max_lat) in areas
+        if min_lon <= lon <= max_lon and min_lat <= lat <= max_lat and point_in_geometry(lon, lat, area.geometry)
+    ]
 
 
 def map_stations(
@@ -104,10 +116,12 @@ def map_stations(
     """
     rows: list[dict] = []
     problems: list[Problem] = []
+    bezirke_boxed = [(area, _bbox(area.geometry)) for area in bezirke]
+    ortsteile_boxed = [(area, _bbox(area.geometry)) for area in ortsteile]
 
     for source, station_id, lat, lon in stations:
-        bezirk_matches = _matching_names(lat, lon, bezirke)
-        ortsteil_matches = _matching_names(lat, lon, ortsteile)
+        bezirk_matches = _matching_names(lat, lon, bezirke_boxed)
+        ortsteil_matches = _matching_names(lat, lon, ortsteile_boxed)
 
         layer_matches = (("bezirk", bezirk_matches), ("ortsteil", ortsteil_matches))
         ok = True
@@ -138,3 +152,45 @@ def write_station_areas(rows: list[dict], data_dir: str | Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.Table.from_pylist(rows, schema=AREAS_SCHEMA), path)
     return path
+
+
+#: The committed Bezirk and Ortsteil layers (see data/SOURCES.md).
+DEFAULT_GEO_DIR = Path(__file__).resolve().parents[2] / "data" / "geo"
+
+
+def refresh_station_areas(
+    data_dir: str | Path,
+    source: str = "nextbike_bn",
+    geo_dir: str | Path = DEFAULT_GEO_DIR,
+) -> list[Problem]:
+    """Map every station's latest known position and rewrite ``station_areas``.
+
+    Reads ``station_information`` for ``source`` from ``data_dir``, maps each
+    station against ``geo_dir``'s ``bezirke.geojson`` and ``ortsteile.geojson``
+    and writes the result with :func:`write_station_areas`. Stations outside
+    the polygons are left out (and returned as problems), so they simply drop
+    out of the per-Bezirk and per-Ortsteil metrics. Does nothing when no
+    station_information has been collected yet.
+    """
+    from berlinbikes.analysis.db import connect
+
+    geo_dir = Path(geo_dir)
+    con = connect(data_dir, source)
+    stations = con.execute(
+        """
+        SELECT source, station_id, arg_max(lat, snapshot_ts), arg_max(lon, snapshot_ts)
+        FROM station_information
+        GROUP BY source, station_id
+        ORDER BY station_id
+        """
+    ).fetchall()
+    con.close()
+    if not stations:
+        return []
+    rows, problems = map_stations(
+        stations,
+        load_areas(geo_dir / "bezirke.geojson", "name"),
+        load_areas(geo_dir / "ortsteile.geojson", "name"),
+    )
+    write_station_areas(rows, data_dir)
+    return problems
