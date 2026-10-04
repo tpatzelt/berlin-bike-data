@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Methodik / Methodology{% endblock %}
+{% block content %}
+<section lang="de">
+<h2>Methodik</h2>
+<p>
+Diese Seite sammelt keine Fahrten. nextbike und Dott veröffentlichen keine
+historischen Fahrtdaten, sondern nur den aktuellen Zustand des Systems
+(GBFS). Deshalb speichert der Collector alle 2 Minuten eine Momentaufnahme
+(<em>snapshot</em>) der Stationen und frei stehenden Räder.
+</p>
+<p>
+Die <code>bike_id</code> jedes Rads wechselt nach jeder Fahrt. Daraus lassen
+sich keine Fahrten und keine Verlaufshistorie einzelner Räder
+rekonstruieren, und <code>bike_id</code> wird nie auf die Festplatte
+geschrieben, geloggt oder als Join-Schlüssel benutzt. Frei stehende Räder
+werden stattdessen auf H3-Zellen der Auflösung 8 aggregiert (siehe
+ADR-0001), bevor etwas gespeichert wird.
+</p>
+<p>
+Jede Kennzahl nennt, auf wie vielen Tagen sie basiert, und verweigert eine
+Veröffentlichung unterhalb von {{ min_full_days }} vollen Tagen
+("noch nicht genug Daten").
+</p>
+<p>
+Bei "leeren Stationsminuten" wird die Dauer zwischen zwei Momentaufnahmen
+derselben Station auf 0 gesetzt, wenn sie mehr als das Doppelte des
+mittleren Abtastintervalls beträgt oder eine erfasste Ausfallzeit
+(<em>gap</em>) überlappt, damit ein Feed-Ausfall oder Neustart die Zahlen
+nicht verzerrt.
+</p>
+<p>
+Der Netto-Fluss zwischen Bezirken ist keine Messung einzelner Fahrten,
+sondern eine Schätzung aus Zu- und Abnahmen je Station und Stunde,
+proportional auf die Bezirke verteilt.
+</p>
+<p>
+Regen wird ab {{ rain_mm_threshold }} mm/h Niederschlag gezählt, Kälte unter
+{{ cold_c_threshold }} °C (siehe ADR-0017). Alle Uhrzeiten auf dieser Seite
+werden in der Zeitzone Europe/Berlin angezeigt; die Rohdaten sind in UTC
+gespeichert.
+</p>
+<h3>Datenquellen</h3>
+<table>
+<thead>
+<tr><th>Quelle</th><th>Verwendet für</th><th>Lizenz</th></tr>
+</thead>
+<tbody>
+{% for source in data_sources %}
+<tr>
+<td>{{ source.name }} ({{ source.url }})</td>
+<td>{{ source.used_for }}</td>
+<td>{{ source.license }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+<section lang="en">
+<h2>Methodology</h2>
+<p>
+This site does not collect trips. nextbike and Dott do not publish
+historical trip data, only the system's current state (GBFS). The collector
+therefore stores a snapshot of stations and free-floating bikes every 2 minutes.
+</p>
+<p>
+Each bike's <code>bike_id</code> rotates after every rental. No trips and no
+per-bike history can be reconstructed from that, and <code>bike_id</code> is
+never written to disk, logged or used as a join key. Free-floating bikes
+are instead aggregated to H3 resolution 8 cells (ADR-0001) before anything
+is stored.
+</p>
+<p>
+Every metric reports how many days of data it is based on and refuses to
+publish below {{ min_full_days }} full days ("not enough data yet").
+</p>
+<p>
+For "empty station minutes", the duration between two snapshots of the
+same station is capped to 0 when it exceeds twice the dataset's median
+snapshot interval, or when it overlaps a recorded outage (<em>gap</em>), so
+a feed outage or restart never inflates the total.
+</p>
+<p>
+Net flow between Bezirke is not a measurement of individual trips; it is
+inferred from each station's gains and losses per hour, allocated
+proportionally across Bezirke.
+</p>
+<p>
+Rain is counted from {{ rain_mm_threshold }} mm/h of precipitation, cold
+below {{ cold_c_threshold }} °C (ADR-0017). All times on this page are shown
+in the Europe/Berlin timezone; the underlying data is stored in UTC.
+</p>
+<h3>Data sources</h3>
+<table>
+<thead>
+<tr><th>Source</th><th>Used for</th><th>License</th></tr>
+</thead>
+<tbody>
+{% for source in data_sources %}
+<tr>
+<td>{{ source.name }} ({{ source.url }})</td>
+<td>{{ source.used_for }}</td>
+<td>{{ source.license }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</section>
+{% endblock %}

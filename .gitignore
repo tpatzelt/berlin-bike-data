@@ -5,3 +5,9 @@ ggmapTemp.png
 *tripdata*.csv
 *trip data*.csv
 __MACOSX/
+
+# berlinbikes
+.venv/
+site-out/
+.bikes.env
+bikes-data/

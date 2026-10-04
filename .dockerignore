@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.bikes.env
+deploy/.bikes.env
+bikes-data
+site-out
+tests
+docs
+upstream-nyc
+data/*.csv

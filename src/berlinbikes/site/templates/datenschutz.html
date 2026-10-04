@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Datenschutzerklärung{% endblock %}
+{% block content %}
+<section lang="de">
+<h2>Datenschutzerklärung</h2>
+<p>Verantwortlicher im Sinne der DSGVO:</p>
+<address>
+{{ operator.name }}<br>
+{{ operator.address }}<br>
+<a href="mailto:{{ operator.email }}">{{ operator.email }}</a>
+</address>
+<h3>Was beim Aufruf passiert</h3>
+<p>Diese Seite setzt keine Cookies, nutzt keine Analyse- oder Tracking-Dienste und hat keine Benutzerkonten.</p>
+<p><strong>Hosting und Server-Logs.</strong> Die Seite wird über Cloudflare (Cloudflare, Inc., USA) ausgeliefert, das Anfragen an den Server weiterleitet. Dabei verarbeiten Cloudflare und der Server technisch notwendige Daten (IP-Adresse, Zeitpunkt, aufgerufene Adresse, Browserkennung). Der Server speichert diese Zugriffsprotokolle zur Abwehr von Angriffen und löscht sie nach kurzer Zeit. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem sicheren Betrieb). Cloudflare ist unter dem EU-US Data Privacy Framework zertifiziert.</p>
+<p><strong>Karte.</strong> Beim Öffnen der Karte (map.html) lädt Ihr Browser die Kartenbibliothek Leaflet von unpkg.com und Kartenkacheln von tile.openstreetmap.org (OpenStreetMap Foundation). Diese Anbieter erhalten dabei Ihre IP-Adresse. Die übrigen Seiten laden nichts von Dritten.</p>
+<h3>Ihre Rechte</h3>
+<p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung und Widerspruch sowie das Recht auf Beschwerde bei einer Aufsichtsbehörde, in Berlin bei der Berliner Beauftragten für Datenschutz und Informationsfreiheit.</p>
+<h3>Die Daten der Seite selbst</h3>
+<p>Die ausgewerteten Daten stammen aus dem öffentlichen GBFS-Feed von nextbike. Fahrrad-IDs werden nie gespeichert; es gibt keine Daten über einzelne Fahrten oder Personen.</p>
+</section>
+<section lang="en">
+<h2>Privacy</h2>
+<p>No cookies, no analytics, no tracking, no accounts. The site is served through Cloudflare; Cloudflare and the server process technically necessary request data (IP address, time, URL, user agent), and the server keeps short-lived access logs for security. Opening the map loads Leaflet from unpkg.com and map tiles from tile.openstreetmap.org, which receive your IP address. Bike ids from the feed are never stored, so there is no data about individual trips or people.</p>
+</section>
+{% endblock %}

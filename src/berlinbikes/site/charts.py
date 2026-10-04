@@ -1,0 +1,663 @@
+"""Builds plain-SVG chart data for the article page's charts.
+
+Renders no HTML itself: it returns the scaled points/bars that
+``index.html`` draws as SVG and a ``<table>`` fallback.
+
+``availability_chart`` draws the citywide availability-by-hour line chart,
+one ``<polyline>`` per weekday (Monday first), colored via the
+``--series-1``..``--series-7`` custom properties defined in ``site.css``,
+following the validated categorical order from the project's data-viz
+palette (blue, orange, aqua, yellow, magenta, green, violet).
+
+``shortage_chart`` draws the G4 8:00 morning-shortage headline and a
+horizontal bar chart of the top stations by empty minutes per day in the
+morning window, bars colored via ``--accent``.
+
+``bezirk_availability_chart`` draws the per-Bezirk availability-by-hour line
+chart (Mon-Fri only), one ``<polyline>`` per Bezirk sorted by name, colored
+via ``--series-1``..``--series-7`` (cycling if there are more than 7).
+
+``flow_chart`` draws the per-Bezirk net-flow-by-hour line chart (weekday mean
+per day), one ``<polyline>`` per Bezirk sorted by name around a visible zero
+baseline, colored the same way as ``bezirk_availability_chart``.
+
+``weather_effect_chart`` draws the two G3-x-G2 rain and temperature small
+multiples: for each of ``weather_effect(con, "rain")`` and
+``weather_effect(con, "temperature")``, one ``<polyline>`` per bucket
+(``rainy``/``dry`` or ``cold``/``warm``) of ``empty_station_share`` (as a
+percentage) over local hours, colored via ``--series-1`` (the baseline
+bucket: dry/warm) and ``--series-2`` (the active bucket: rainy/cold). The
+``"excluded"`` row is never drawn, but its ``n_hours`` is surfaced on the
+chart for the caption. A bucket with no rows at all (for example no rainy
+hours yet) is left out of the drawing and reported in ``missing_buckets``
+instead of crashing.
+
+``footprint_chart`` draws the G3 daily-footprint headline and a vertical
+stacked-bar chart, one bar per full day, of the e-bike/pedal/unknown split
+of bikes in the system that day, colored via ``--series-1`` (e-bike),
+``--series-2`` (pedal) and ``--series-3`` (unknown).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from berlinbikes.analysis.availability import availability_by_hour
+from berlinbikes.analysis.db import connect
+from berlinbikes.analysis.empty import MORNING_WINDOW, morning_shortage
+from berlinbikes.analysis.flow import net_flow_by_bezirk
+from berlinbikes.analysis.footprint import daily_footprint
+from berlinbikes.analysis.weather_effect import weather_effect
+
+WEEKDAY_NAMES = (
+    ("Mo", "Mon"),
+    ("Di", "Tue"),
+    ("Mi", "Wed"),
+    ("Do", "Thu"),
+    ("Fr", "Fri"),
+    ("Sa", "Sat"),
+    ("So", "Sun"),
+)
+
+VIEW_WIDTH = 480
+VIEW_HEIGHT = 240
+_PAD_LEFT = 32
+_PAD_RIGHT = 10
+_PAD_TOP = 10
+_PAD_BOTTOM = 20
+
+
+@dataclass(frozen=True)
+class WeekdaySeries:
+    index: int
+    name_de: str
+    name_en: str
+    points: str
+    hours: list[float]
+
+
+@dataclass(frozen=True)
+class AvailabilityChart:
+    status: str
+    full_days: int
+    message: str | None
+    view_box: str
+    weekdays: list[WeekdaySeries] | None
+
+
+def _scale_x(hour: int) -> float:
+    return _PAD_LEFT + hour / 23 * (VIEW_WIDTH - _PAD_LEFT - _PAD_RIGHT)
+
+
+def _scale_y(value: float, y_min: float, y_span: float) -> float:
+    plot_height = VIEW_HEIGHT - _PAD_TOP - _PAD_BOTTOM
+    return VIEW_HEIGHT - _PAD_BOTTOM - (value - y_min) / y_span * plot_height
+
+
+def availability_chart(data_dir: str | Path) -> AvailabilityChart:
+    """Citywide mean bikes available, one series per weekday, hour 0-23.
+
+    Returns ``status="insufficient_data"`` with no ``weekdays`` below the
+    14-full-day minimum, same as :func:`availability_by_hour` itself.
+    """
+    result = availability_by_hour(connect(data_dir), by="city")
+    if result.status != "ok":
+        return AvailabilityChart(
+            status=result.status,
+            full_days=result.full_days,
+            message=result.message,
+            view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+            weekdays=None,
+        )
+
+    grid: dict[tuple[int, int], float] = {
+        (weekday, hour): mean for weekday, hour, mean, _n in result.rows
+    }
+    all_values = [mean for _weekday, _hour, mean, _n in result.rows]
+    y_min, y_max = min(all_values), max(all_values)
+    y_span = (y_max - y_min) or 1.0
+
+    weekdays = []
+    for index, (name_de, name_en) in enumerate(WEEKDAY_NAMES):
+        hours = [grid[(index, hour)] for hour in range(24)]
+        points = " ".join(
+            f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}"
+            for hour, value in enumerate(hours)
+        )
+        weekdays.append(
+            WeekdaySeries(index=index, name_de=name_de, name_en=name_en, points=points, hours=hours)
+        )
+
+    return AvailabilityChart(
+        status="ok",
+        full_days=result.full_days,
+        message=None,
+        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        weekdays=weekdays,
+    )
+
+
+@dataclass(frozen=True)
+class BezirkSeries:
+    index: int
+    color_index: int
+    name: str
+    points: str
+    hours: list[float | None]
+
+
+@dataclass(frozen=True)
+class BezirkAvailabilityChart:
+    status: str
+    full_days: int
+    message: str | None
+    view_box: str
+    bezirke: list[BezirkSeries] | None
+
+
+def bezirk_availability_chart(data_dir: str | Path) -> BezirkAvailabilityChart:
+    """Mean bikes available by local hour per Bezirk, Mon-Fri only, hour 0-23.
+
+    Each Bezirk's hour value is the unweighted mean of its weekday (0-4)
+    values that exist for that hour; an hour with no weekday value for a
+    given Bezirk is left out of that Bezirk's polyline and shown as ``None``
+    (rendered as '--' by the template). Returns ``status="insufficient_data"``
+    with no ``bezirke`` below the 14-full-day minimum, same as
+    :func:`availability_by_hour` itself.
+    """
+    result = availability_by_hour(connect(data_dir), by="bezirk")
+    if result.status != "ok":
+        return BezirkAvailabilityChart(
+            status=result.status,
+            full_days=result.full_days,
+            message=result.message,
+            view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+            bezirke=None,
+        )
+
+    weekday_values: dict[tuple[str, int], list[float]] = {}
+    bezirk_names: set[str] = set()
+    for weekday, hour, bezirk, mean, _n in result.rows:
+        bezirk_names.add(bezirk)
+        if weekday <= 4:
+            weekday_values.setdefault((bezirk, hour), []).append(mean)
+
+    hour_means = {key: sum(values) / len(values) for key, values in weekday_values.items()}
+
+    all_values = list(hour_means.values())
+    y_min, y_max = (min(all_values), max(all_values)) if all_values else (0.0, 1.0)
+    y_span = (y_max - y_min) or 1.0
+
+    bezirke = []
+    for index, name in enumerate(sorted(bezirk_names)):
+        hours: list[float | None] = []
+        points_parts = []
+        for hour in range(24):
+            value = hour_means.get((name, hour))
+            hours.append(value)
+            if value is not None:
+                points_parts.append(f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}")
+        bezirke.append(
+            BezirkSeries(
+                index=index,
+                color_index=(index % 7) + 1,
+                name=name,
+                points=" ".join(points_parts),
+                hours=hours,
+            )
+        )
+
+    return BezirkAvailabilityChart(
+        status="ok",
+        full_days=result.full_days,
+        message=None,
+        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        bezirke=bezirke,
+    )
+
+
+@dataclass(frozen=True)
+class FlowSeries:
+    index: int
+    color_index: int
+    name: str
+    points: str
+    hours: list[float]
+
+
+@dataclass(frozen=True)
+class FlowChart:
+    status: str
+    full_days: int
+    message: str | None
+    view_box: str
+    zero_y: float
+    x_start: float
+    x_end: float
+    bezirke: list[FlowSeries] | None
+
+
+def flow_chart(data_dir: str | Path) -> FlowChart:
+    """Net bikes gained/lost per Bezirk by local hour, weekday mean per day.
+
+    Uses :func:`net_flow_by_bezirk`'s ``day_type='weekday'`` rows, whose
+    ``net`` value is already the mean per weekday date (the metric divides
+    by the number of weekday dates in
+    :func:`berlinbikes.analysis.coverage.full_days`). An (bezirk, hour) with
+    no row (no attributable deltas) is drawn as 0, not left out of the
+    polyline. Returns ``status="insufficient_data"`` with no ``bezirke``
+    below the 14-full-day minimum, same as :func:`net_flow_by_bezirk` itself.
+    """
+    result = net_flow_by_bezirk(connect(data_dir))
+    if result.status != "ok":
+        return FlowChart(
+            status=result.status,
+            full_days=result.full_days,
+            message=result.message,
+            view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+            zero_y=0.0,
+            x_start=0.0,
+            x_end=0.0,
+            bezirke=None,
+        )
+
+    net_by_key: dict[tuple[str, int], float] = {}
+    bezirk_names: set[str] = set()
+    for day_type, hour, bezirk, _gains, _losses, net in result.rows:
+        if day_type != "weekday":
+            continue
+        bezirk_names.add(bezirk)
+        net_by_key[(bezirk, hour)] = net
+
+    all_values = list(net_by_key.values()) + [0.0]
+    y_min, y_max = min(all_values), max(all_values)
+    y_span = (y_max - y_min) or 1.0
+
+    bezirke = []
+    for index, name in enumerate(sorted(bezirk_names)):
+        hours = [net_by_key.get((name, hour), 0.0) for hour in range(24)]
+        points = " ".join(
+            f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}" for hour, value in enumerate(hours)
+        )
+        bezirke.append(
+            FlowSeries(index=index, color_index=(index % 7) + 1, name=name, points=points, hours=hours)
+        )
+
+    return FlowChart(
+        status="ok",
+        full_days=result.full_days,
+        message=None,
+        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        zero_y=_scale_y(0.0, y_min, y_span),
+        x_start=_scale_x(0),
+        x_end=_scale_x(23),
+        bezirke=bezirke,
+    )
+
+
+#: How many stations the morning-shortage bar chart shows.
+SHORTAGE_TOP_N = 10
+
+_BAR_VIEW_WIDTH = 480
+_BAR_HEIGHT = 18
+_BAR_GAP = 8
+_BAR_PAD_LEFT = 150
+_BAR_PAD_RIGHT = 54
+_BAR_PAD_TOP = 8
+_BAR_PAD_BOTTOM = 8
+_BAR_MIN_VIEW_HEIGHT = 60
+
+_WEEKDAY_ABBR_DE = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+_WEEKDAY_ABBR_EN = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def _window_label(window) -> tuple[str, str]:
+    """A short bilingual description of a morning-shortage ``Window``, e.g. ``Mo-Fr 7:30-8:30``."""
+    weekdays, start, end = window
+    days = sorted(weekdays)
+    time_part = f"{start.hour}:{start.minute:02d}-{end.hour}:{end.minute:02d}"
+    de = f"{_WEEKDAY_ABBR_DE[days[0]]}-{_WEEKDAY_ABBR_DE[days[-1]]} {time_part}"
+    en = f"{_WEEKDAY_ABBR_EN[days[0]]}-{_WEEKDAY_ABBR_EN[days[-1]]} {time_part}"
+    return de, en
+
+
+@dataclass(frozen=True)
+class ShortageBar:
+    station_id: str
+    ortsteil: str
+    minutes_per_day: float
+    bar_x: float
+    bar_y: float
+    bar_width: float
+    bar_height: float
+    label_y: float
+    value_x: float
+
+
+@dataclass(frozen=True)
+class ShortageChart:
+    status: str
+    full_days: int
+    message: str | None
+    share_pct: float | None
+    view_box: str
+    aria_label: str
+    bars: list[ShortageBar] | None
+
+
+def _bar_view_height(n: int) -> float:
+    n = max(n, 1)
+    return _BAR_PAD_TOP + _BAR_PAD_BOTTOM + n * _BAR_HEIGHT + (n - 1) * _BAR_GAP
+
+
+def shortage_chart(data_dir: str | Path) -> ShortageChart:
+    """The G4 8:00 morning-shortage headline and its top-stations bar chart.
+
+    Returns ``status="insufficient_data"`` with no ``bars`` below the
+    14-full-day minimum, same as :func:`morning_shortage` itself. The
+    headline share comes from each weekday's latest snapshot in local
+    [07:50, 08:00]. When no weekday has one (for example after a collector
+    outage over that window every day), ``morning_shortage`` reports
+    ``share_empty_at_0800=None``; this is rendered as ``share_pct=None`` so
+    the headline sentence is left out, while the bar chart and table still
+    render.
+    """
+    result = morning_shortage(connect(data_dir))
+    de_label, en_label = _window_label(MORNING_WINDOW)
+    if result.status != "ok":
+        return ShortageChart(
+            status=result.status,
+            full_days=result.full_days,
+            message=result.message,
+            share_pct=None,
+            view_box=f"0 0 {_BAR_VIEW_WIDTH} {_BAR_MIN_VIEW_HEIGHT}",
+            aria_label="",
+            bars=None,
+        )
+
+    share = result.rows["share_empty_at_0800"]
+    share_pct = round(share * 100, 1) if share is not None else None
+
+    top_stations = result.rows["stations"][:SHORTAGE_TOP_N]
+    values = [minutes_per_day for *_rest, minutes_per_day in top_stations]
+    max_value = max(values) if values else 1.0
+    plot_width = _BAR_VIEW_WIDTH - _BAR_PAD_LEFT - _BAR_PAD_RIGHT
+
+    bars = []
+    for i, (station_id, _bezirk, ortsteil, _total, minutes_per_day) in enumerate(top_stations):
+        bar_y = _BAR_PAD_TOP + i * (_BAR_HEIGHT + _BAR_GAP)
+        bar_width = (minutes_per_day / max_value) * plot_width if max_value else 0.0
+        bars.append(
+            ShortageBar(
+                station_id=station_id,
+                ortsteil=ortsteil,
+                minutes_per_day=minutes_per_day,
+                bar_x=_BAR_PAD_LEFT,
+                bar_y=bar_y,
+                bar_width=bar_width,
+                bar_height=_BAR_HEIGHT,
+                label_y=bar_y + _BAR_HEIGHT * 0.65,
+                value_x=_BAR_PAD_LEFT + bar_width + 4,
+            )
+        )
+
+    aria_label = (
+        f"Leerstehende Stationen am Morgen, {de_label} Uhr, Top {len(bars)} / "
+        f"Stations empty in the morning, {en_label}, top {len(bars)}"
+    )
+
+    return ShortageChart(
+        status="ok",
+        full_days=result.full_days,
+        message=None,
+        share_pct=share_pct,
+        view_box=f"0 0 {_BAR_VIEW_WIDTH} {_bar_view_height(len(bars))}",
+        aria_label=aria_label,
+        bars=bars,
+    )
+
+
+#: bilingual (de, en) label per weather_effect() bucket name.
+_WEATHER_BUCKET_LABELS: dict[str, tuple[str, str]] = {
+    "rainy": ("regnerisch", "rainy"),
+    "dry": ("trocken", "dry"),
+    "cold": ("kalt", "cold"),
+    "warm": ("warm", "warm"),
+}
+
+#: (active_bucket, other_bucket) per weather_effect() kind, same order as weather_effect.
+_WEATHER_KIND_BUCKETS: dict[str, tuple[str, str]] = {
+    "rain": ("rainy", "dry"),
+    "temperature": ("cold", "warm"),
+}
+
+
+@dataclass(frozen=True)
+class WeatherBucketSeries:
+    bucket: str
+    label_de: str
+    label_en: str
+    color_index: int
+    points: str
+    hours: list[float | None]
+
+
+@dataclass(frozen=True)
+class WeatherKindChart:
+    kind: str
+    view_box: str
+    excluded_n_hours: int
+    buckets: list[WeatherBucketSeries]
+    missing_buckets: list[tuple[str, str]]
+
+
+@dataclass(frozen=True)
+class WeatherEffectChart:
+    status: str
+    full_days: int
+    message: str | None
+    rain: WeatherKindChart | None
+    temperature: WeatherKindChart | None
+
+
+def _weather_kind_chart(kind: str, rows) -> WeatherKindChart:
+    active_bucket, other_bucket = _WEATHER_KIND_BUCKETS[kind]
+    by_bucket: dict[str, dict[int, float]] = {active_bucket: {}, other_bucket: {}}
+    excluded_n_hours = 0
+    for bucket, local_hour, _mean, share, _n_snapshots, n_hours in rows:
+        if bucket == "excluded":
+            excluded_n_hours = n_hours
+            continue
+        by_bucket[bucket][local_hour] = share * 100
+
+    all_values = [0.0] + [v for values in by_bucket.values() for v in values.values()]
+    y_min, y_max = min(all_values), max(all_values)
+    y_span = (y_max - y_min) or 1.0
+
+    buckets: list[WeatherBucketSeries] = []
+    missing_buckets: list[tuple[str, str]] = []
+    for index, bucket in enumerate((active_bucket, other_bucket)):
+        values = by_bucket[bucket]
+        label_de, label_en = _WEATHER_BUCKET_LABELS[bucket]
+        if not values:
+            missing_buckets.append((label_de, label_en))
+            continue
+        hours: list[float | None] = []
+        points_parts = []
+        for hour in range(24):
+            value = values.get(hour)
+            hours.append(value)
+            if value is not None:
+                points_parts.append(f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}")
+        buckets.append(
+            WeatherBucketSeries(
+                bucket=bucket,
+                label_de=label_de,
+                label_en=label_en,
+                color_index=index + 1,
+                points=" ".join(points_parts),
+                hours=hours,
+            )
+        )
+
+    return WeatherKindChart(
+        kind=kind,
+        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        excluded_n_hours=excluded_n_hours,
+        buckets=buckets,
+        missing_buckets=missing_buckets,
+    )
+
+
+def weather_effect_chart(data_dir: str | Path) -> WeatherEffectChart:
+    """Availability on rainy/dry and cold/warm hours, by local hour.
+
+    Returns ``status="insufficient_data"`` with no ``rain``/``temperature``
+    below the 14-full-day minimum, same as :func:`weather_effect` itself
+    (``kind="rain"`` and ``kind="temperature"`` share one day-count guard,
+    so their status and full_days always agree). When enough data exists,
+    each of ``rain``/``temperature`` carries its own two-bucket chart; a
+    bucket with no rows (for example no rainy hours yet, as when no weather
+    has been collected) is reported in that chart's ``missing_buckets``
+    instead of being drawn.
+    """
+    con = connect(data_dir)
+    rain_result = weather_effect(con, "rain")
+
+    if rain_result.status != "ok":
+        return WeatherEffectChart(
+            status=rain_result.status,
+            full_days=rain_result.full_days,
+            message=rain_result.message,
+            rain=None,
+            temperature=None,
+        )
+
+    temperature_result = weather_effect(con, "temperature")
+
+    return WeatherEffectChart(
+        status="ok",
+        full_days=rain_result.full_days,
+        message=None,
+        rain=_weather_kind_chart("rain", rain_result.rows),
+        temperature=_weather_kind_chart("temperature", temperature_result.rows),
+    )
+
+
+_FOOT_VIEW_WIDTH = 480
+_FOOT_VIEW_HEIGHT = 240
+_FOOT_PAD_LEFT = 36
+_FOOT_PAD_RIGHT = 10
+_FOOT_PAD_TOP = 10
+_FOOT_PAD_BOTTOM = 10
+_FOOT_BAR_GAP = 1
+
+
+@dataclass(frozen=True)
+class FootprintBar:
+    date: str
+    n_stations: int
+    bikes_at_stations: float
+    bikes_free_floating: float
+    ebikes: float
+    pedal_bikes: float
+    unknown_type: float
+    bar_x: float
+    bar_width: float
+    ebike_y: float
+    ebike_height: float
+    pedal_y: float
+    pedal_height: float
+    unknown_y: float
+    unknown_height: float
+
+
+@dataclass(frozen=True)
+class FootprintChart:
+    status: str
+    full_days: int
+    message: str | None
+    view_box: str
+    latest_date: str | None
+    latest_n_stations: int | None
+    latest_bikes_total: float | None
+    bars: list[FootprintBar] | None
+
+
+def footprint_chart(data_dir: str | Path) -> FootprintChart:
+    """The G3 daily-footprint headline and its stacked-bar-per-day chart.
+
+    Returns ``status="insufficient_data"`` with no ``bars`` below the
+    14-full-day minimum, same as :func:`daily_footprint` itself. Each bar
+    stacks ``mean_ebikes`` (bottom, ``--series-1``), ``mean_pedal_bikes``
+    (middle, ``--series-2``) and ``mean_unknown_type`` (top, ``--series-3``)
+    for one full local day; the headline uses the latest full day's
+    ``n_stations`` and that same three-way total.
+    """
+    result = daily_footprint(connect(data_dir))
+    if result.status != "ok":
+        return FootprintChart(
+            status=result.status,
+            full_days=result.full_days,
+            message=result.message,
+            view_box=f"0 0 {_FOOT_VIEW_WIDTH} {_FOOT_VIEW_HEIGHT}",
+            latest_date=None,
+            latest_n_stations=None,
+            latest_bikes_total=None,
+            bars=None,
+        )
+
+    rows = result.rows
+    totals = [ebikes + pedal_bikes + unknown for *_rest, ebikes, pedal_bikes, unknown in rows]
+    y_max = max(totals) if totals else 1.0
+    y_max = y_max or 1.0
+
+    plot_width = _FOOT_VIEW_WIDTH - _FOOT_PAD_LEFT - _FOOT_PAD_RIGHT
+    plot_height = _FOOT_VIEW_HEIGHT - _FOOT_PAD_TOP - _FOOT_PAD_BOTTOM
+    n = len(rows)
+    bar_width = (plot_width - (n - 1) * _FOOT_BAR_GAP) / n if n else 0.0
+    baseline_y = _FOOT_VIEW_HEIGHT - _FOOT_PAD_BOTTOM
+
+    bars = []
+    for i, (local_date, n_stations, bikes_at_stations, bikes_free_floating, ebikes, pedal_bikes, unknown) in enumerate(
+        rows
+    ):
+        scale = plot_height / y_max
+        ebike_height = ebikes * scale
+        pedal_height = pedal_bikes * scale
+        unknown_height = unknown * scale
+        ebike_y = baseline_y - ebike_height
+        pedal_y = ebike_y - pedal_height
+        unknown_y = pedal_y - unknown_height
+        bars.append(
+            FootprintBar(
+                date=local_date.isoformat(),
+                n_stations=n_stations,
+                bikes_at_stations=bikes_at_stations,
+                bikes_free_floating=bikes_free_floating,
+                ebikes=ebikes,
+                pedal_bikes=pedal_bikes,
+                unknown_type=unknown,
+                bar_x=_FOOT_PAD_LEFT + i * (bar_width + _FOOT_BAR_GAP),
+                bar_width=bar_width,
+                ebike_y=ebike_y,
+                ebike_height=ebike_height,
+                pedal_y=pedal_y,
+                pedal_height=pedal_height,
+                unknown_y=unknown_y,
+                unknown_height=unknown_height,
+            )
+        )
+
+    latest = bars[-1]
+    return FootprintChart(
+        status="ok",
+        full_days=result.full_days,
+        message=None,
+        view_box=f"0 0 {_FOOT_VIEW_WIDTH} {_FOOT_VIEW_HEIGHT}",
+        latest_date=latest.date,
+        latest_n_stations=latest.n_stations,
+        latest_bikes_total=latest.ebikes + latest.pedal_bikes + latest.unknown_type,
+        bars=bars,
+    )
