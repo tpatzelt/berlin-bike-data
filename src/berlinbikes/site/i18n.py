@@ -181,50 +181,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "map.weekday.3": {"de": "Donnerstag", "en": "Thursday"},
     "map.weekday.4": {"de": "Freitag", "en": "Friday"},
     "map.weekday.5": {"de": "Samstag", "en": "Saturday"},
-    "methodology.p.snapshot": {
-        "de": "Diese Seite sammelt keine Fahrten. nextbike und Dott veröffentlichen keine historischen Fahrtdaten, sondern nur den aktuellen Zustand des Systems (GBFS). Deshalb speichert der Collector alle 2 Minuten eine Momentaufnahme (<em>snapshot</em>) der Stationen und frei stehenden Räder.",
-        "en": "This site does not collect trips. nextbike and Dott do not publish historical trip data, only the system's current state (GBFS). The collector therefore stores a snapshot of stations and free-floating bikes every 2 minutes.",
-    },
-    "methodology.p.bike_id": {
-        "de": "Die <code>bike_id</code> jedes Rads wechselt nach jeder Fahrt. Daraus lassen sich keine Fahrten und keine Verlaufshistorie einzelner Räder rekonstruieren, und <code>bike_id</code> wird nie auf die Festplatte geschrieben, geloggt oder als Join-Schlüssel benutzt. Frei stehende Räder werden stattdessen auf H3-Zellen der Auflösung 8 aggregiert (siehe ADR-0001), bevor etwas gespeichert wird.",
-        "en": "Each bike's <code>bike_id</code> rotates after every rental. No trips and no per-bike history can be reconstructed from that, and <code>bike_id</code> is never written to disk, logged or used as a join key. Free-floating bikes are instead aggregated to H3 resolution 8 cells (ADR-0001) before anything is stored.",
-    },
-    "methodology.p.min_days": {
-        "de": "Jede Kennzahl nennt, auf wie vielen Tagen sie basiert, und verweigert eine Veröffentlichung unterhalb von {min_full_days} vollen Tagen (\"noch nicht genug Daten\").",
-        "en": "Every metric reports how many days of data it is based on and refuses to publish below {min_full_days} full days (\"not enough data yet\").",
-    },
-    "methodology.p.empty": {
-        "de": "Bei \"leeren Stationsminuten\" wird die Dauer zwischen zwei Momentaufnahmen derselben Station auf 0 gesetzt, wenn sie mehr als das Doppelte des mittleren Abtastintervalls beträgt oder eine erfasste Ausfallzeit (<em>gap</em>) überlappt, damit ein Feed-Ausfall oder Neustart die Zahlen nicht verzerrt.",
-        "en": "For \"empty station minutes\", the duration between two snapshots of the same station is capped to 0 when it exceeds twice the dataset's median snapshot interval, or when it overlaps a recorded outage (<em>gap</em>), so a feed outage or restart never inflates the total.",
-    },
-    "methodology.p.flow": {
-        "de": "Der Netto-Fluss zwischen Bezirken ist keine Messung einzelner Fahrten, sondern eine Schätzung aus Zu- und Abnahmen je Station und Stunde, proportional auf die Bezirke verteilt.",
-        "en": "Net flow between Bezirke is not a measurement of individual trips; it is inferred from each station's gains and losses per hour, allocated proportionally across Bezirke.",
-    },
-    "methodology.p.weather": {
-        "de": "Regen wird ab {rain_mm} mm/h Niederschlag gezählt, Kälte unter {cold_c} °C (siehe ADR-0017). Alle Uhrzeiten auf dieser Seite werden in der Zeitzone Europe/Berlin angezeigt; die Rohdaten sind in UTC gespeichert.",
-        "en": "Rain is counted from {rain_mm} mm/h of precipitation, cold below {cold_c} °C (ADR-0017). All times on this page are shown in the Europe/Berlin timezone; the underlying data is stored in UTC.",
-    },
-    "methodology.h2": {
-        "de": "Methodik",
-        "en": "Methodology",
-    },
-    "methodology.h3": {
-        "de": "Datenquellen",
-        "en": "Data sources",
-    },
-    "methodology.col.source": {
-        "de": "Quelle",
-        "en": "Source",
-    },
-    "methodology.col.used_for": {
-        "de": "Verwendet für",
-        "en": "Used for",
-    },
-    "methodology.col.license": {
-        "de": "Lizenz",
-        "en": "License",
-    },
     "methodology.h2": {
         "de": "Methodik",
         "en": "Methodology",

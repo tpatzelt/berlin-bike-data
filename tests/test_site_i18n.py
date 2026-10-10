@@ -170,3 +170,18 @@ def test_all_six_articles_are_single_language(which, name, site, synthetic_site_
         for de, en in headings.values():
             mine, theirs = (de, en) if name == "index.html" else (en, de)
             assert mine in text.replace("&#39;", "'") and theirs not in text.replace("&#39;", "'")
+
+
+def test_strings_has_no_duplicate_keys():
+    import ast
+    import inspect
+
+    import berlinbikes.site.i18n as mod
+
+    tree = ast.parse(inspect.getsource(mod))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", None) == "STRINGS":
+            keys = [k.value for k in node.value.keys if isinstance(k, ast.Constant)]
+            assert len(keys) == len(set(keys))
+            return
+    raise AssertionError("STRINGS literal not found")
