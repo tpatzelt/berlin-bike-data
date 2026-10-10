@@ -149,15 +149,24 @@ def synthetic_site_dir(tmp_path_factory, synthetic_data_dir):
 
 @pytest.mark.parametrize("which", ("empty", "synthetic"))
 @pytest.mark.parametrize("name", ("index.html", "index.en.html"))
-def test_first_three_articles_are_single_language(which, name, site, synthetic_site_dir):
+def test_all_six_articles_are_single_language(which, name, site, synthetic_site_dir):
     root = site[0] if which == "empty" else synthetic_site_dir
     p = _ArticleLangs()
     p.feed((root / name).read_text())
     assert p.article_ids == ["availability", "shortage", "bezirke", "flow", "weather", "footprint"]
-    for article in ("availability", "shortage", "bezirke"):
+    for article in p.article_ids:
         assert [lang for lang in p.langs[article] if lang != p.html_lang] == []
     if which == "synthetic":
         text = (root / name).read_text()
         marker = "Verfügbarkeit in Berlin" if name == "index.html" else "Availability in Berlin"
         other = "Availability in Berlin" if name == "index.html" else "Verfügbarkeit in Berlin"
         assert marker in text and other not in text
+        # one distinctive heading per converted article, in each language only
+        headings = {
+            "flow": ("Netto-Fluss zwischen Bezirken", "Net flow between Bezirke"),
+            "weather": ("Verfügbarkeit bei Regen und Kälte", "Availability on rainy and cold hours"),
+            "footprint": ("Der tägliche Fußabdruck des Systems", "The system's daily footprint"),
+        }
+        for de, en in headings.values():
+            mine, theirs = (de, en) if name == "index.html" else (en, de)
+            assert mine in text.replace("&#39;", "'") and theirs not in text.replace("&#39;", "'")

@@ -142,27 +142,18 @@
 {% endif %}
 </article>
 <article id="flow">
-<section lang="de">
-<h2>Netto-Fluss zwischen Bezirken</h2>
-<p>Netto gewonnene oder verlorene Räder je Bezirk und Uhrzeit, Mo-Fr im Mittel pro Tag (Europe/Berlin).</p>
-</section>
-<section lang="en">
-<h2>Net flow between Bezirke</h2>
-<p>Net bikes gained or lost per Bezirk by local hour, Mon-Fri mean per day (Europe/Berlin).</p>
-</section>
+<h2>{{ t("flow.heading") }}</h2>
+<p>{{ t("flow.intro") }}</p>
 {% if flow_chart.status == "ok" %}
 <figure>
 <svg viewBox="{{ flow_chart.view_box }}" role="img" class="chart"
-     aria-label="Räder gewonnen/verloren je Bezirk und Uhrzeit (0-23 Uhr, Mo-Fr im Mittel pro Tag, Europe/Berlin) / Bikes gained/lost per Bezirk by local hour (0-23, Mon-Fri mean per day, Europe/Berlin)">
+     aria-label="{{ t("flow.aria") }}">
 <line x1="{{ flow_chart.x_start }}" x2="{{ flow_chart.x_end }}" y1="{{ flow_chart.zero_y }}" y2="{{ flow_chart.zero_y }}" stroke="var(--muted)" stroke-dasharray="4 2"></line>
 {% for bez in flow_chart.bezirke %}
 <polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2"></polyline>
 {% endfor %}
 </svg>
-<figcaption>
-<span lang="de">Räder gewonnen (+) / verloren (-) je Bezirk und Uhrzeit (0–23 Uhr, Europe/Berlin), Mo-Fr im Mittel pro Tag, auf Basis von {{ flow_chart.full_days }} vollen Tagen.</span>
-<span lang="en">Bikes gained (+) / lost (-) per Bezirk by local hour (0–23, Europe/Berlin), Mon-Fri mean per day, based on {{ flow_chart.full_days }} full days.</span>
-</figcaption>
+<figcaption>{{ t("flow.caption", full_days=flow_chart.full_days) }}</figcaption>
 </figure>
 <ul class="chart-legend">
 {% for bez in flow_chart.bezirke %}
@@ -170,12 +161,9 @@
 {% endfor %}
 </ul>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<summary>{{ t("common.show_table") }}</summary>
 <table>
-<caption>
-<span lang="de">Netto gewonnene/verlorene Räder je Bezirk und Uhrzeit (Mo-Fr)</span>
-<span lang="en">Net bikes gained/lost per Bezirk by local hour (Mo-Fr)</span>
-</caption>
+<caption>{{ t("flow.table.caption") }}</caption>
 <thead>
 <tr>
 <th scope="col">Bezirk</th>
@@ -203,44 +191,32 @@
 {% endif %}
 </article>
 <article id="weather">
-<section lang="de">
-<h2>Verfügbarkeit bei Regen und Kälte</h2>
-<p>Anteil leerer Stationen je Uhrzeit, bei Regen (&ge; {{ "%.1f"|format(rain_mm_threshold) }} mm/h) im Vergleich zu trocken, und bei Kälte (&lt; {{ "%.1f"|format(cold_c_threshold) }} °C) im Vergleich zu warm (Europe/Berlin).</p>
-</section>
-<section lang="en">
-<h2>Availability on rainy and cold hours</h2>
-<p>Share of empty stations by local hour, rainy (&ge; {{ "%.1f"|format(rain_mm_threshold) }} mm/h) versus dry, and cold (&lt; {{ "%.1f"|format(cold_c_threshold) }} &deg;C) versus warm (Europe/Berlin).</p>
-</section>
+<h2>{{ t("weather.heading") }}</h2>
+<p>{{ t("weather.intro", rain=("%.1f"|format(rain_mm_threshold)), cold=("%.1f"|format(cold_c_threshold))) }}</p>
 {% if weather_chart.status == "ok" %}
-{% for kind_chart, cap_de, cap_en in [(weather_chart.rain, "Regen", "rain"), (weather_chart.temperature, "Kälte", "temperature")] %}
+{% for kind_chart, kind_key in [(weather_chart.rain, "rain"), (weather_chart.temperature, "temperature")] %}
 {% if kind_chart.buckets %}
 <figure>
 <svg viewBox="{{ kind_chart.view_box }}" role="img" class="chart weather" data-kind="{{ kind_chart.kind }}"
-     aria-label="Anteil leerer Stationen je Uhrzeit (0-23 Uhr, Europe/Berlin), {{ cap_de }} / Share of empty stations by local hour (0-23, Europe/Berlin), {{ cap_en }}">
+     aria-label="{{ t("weather.aria", kind=t("weather.kind." ~ kind_key)) }}">
 {% for bucket in kind_chart.buckets %}
 <polyline points="{{ bucket.points }}" fill="none" stroke="var(--series-{{ bucket.color_index }})" stroke-width="2"></polyline>
 {% endfor %}
 </svg>
-<figcaption>
-<span lang="de">Anteil leerer Stationen (%) je Uhrzeit (0–23 Uhr, Europe/Berlin), {{ cap_de }}, auf Basis von {{ weather_chart.full_days }} vollen Tagen; {{ kind_chart.excluded_n_hours }} Stunden ohne Wetterdaten ausgeschlossen.</span>
-<span lang="en">Share of empty stations (%) by local hour (0–23, Europe/Berlin), {{ cap_en }}, based on {{ weather_chart.full_days }} full days; {{ kind_chart.excluded_n_hours }} hours excluded for missing weather.</span>
-</figcaption>
+<figcaption>{{ t("weather.caption", kind=t("weather.kind." ~ kind_key), full_days=weather_chart.full_days, excluded=kind_chart.excluded_n_hours) }}</figcaption>
 </figure>
 <ul class="chart-legend">
 {% for bucket in kind_chart.buckets %}
-<li><span class="swatch" style="background: var(--series-{{ bucket.color_index }})"></span><span lang="de">{{ bucket.label_de }}</span><span lang="en">{{ bucket.label_en }}</span></li>
+<li><span class="swatch" style="background: var(--series-{{ bucket.color_index }})"></span><span>{{ bucket["label_" ~ lang] }}</span></li>
 {% endfor %}
 </ul>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<summary>{{ t("common.show_table") }}</summary>
 <table>
-<caption>
-<span lang="de">Anteil leerer Stationen je Uhrzeit, {{ cap_de }}</span>
-<span lang="en">Share of empty stations by local hour, {{ cap_en }}</span>
-</caption>
+<caption>{{ t("weather.table.caption", kind=t("weather.kind." ~ kind_key)) }}</caption>
 <thead>
 <tr>
-<th scope="col"><span lang="de">Zustand</span><span lang="en">Bucket</span></th>
+<th scope="col">{{ t("weather.table.bucket") }}</th>
 {% for hour in range(24) %}
 <th scope="col">{{ hour }}</th>
 {% endfor %}
@@ -249,7 +225,7 @@
 <tbody>
 {% for bucket in kind_chart.buckets %}
 <tr>
-<th scope="row"><span lang="de">{{ bucket.label_de }}</span><span lang="en">{{ bucket.label_en }}</span></th>
+<th scope="row">{{ bucket["label_" ~ lang] }}</th>
 {% for value in bucket.hours %}
 <td>{{ "%.1f"|format(value) if value is not none else "–" }}</td>
 {% endfor %}
@@ -259,11 +235,8 @@
 </table>
 </details>
 {% endif %}
-{% for label_de, label_en in kind_chart.missing_buckets %}
-<p class="not-enough-data">
-<span lang="de">Für „{{ label_de }}“ liegen noch keine Stunden vor.</span>
-<span lang="en">No hours classified as “{{ label_en }}” yet.</span>
-</p>
+{% for labels in kind_chart.missing_buckets %}
+<p class="not-enough-data">{{ t("weather.missing", label=labels[0 if lang == "de" else 1]) }}</p>
 {% endfor %}
 {% endfor %}
 {% else %}
@@ -273,54 +246,40 @@
 {% endif %}
 </article>
 <article id="footprint">
-<section lang="de">
-<h2>Der tägliche Fußabdruck des Systems</h2>
+<h2>{{ t("footprint.heading") }}</h2>
 {% if footprint_chart.status == "ok" %}
-<p>Am {{ footprint_chart.latest_date }} gab es {{ footprint_chart.latest_n_stations }} Stationen und rund {{ "%.0f"|format(footprint_chart.latest_bikes_total) }} Räder im System.</p>
+<p>{{ t("footprint.summary", date=footprint_chart.latest_date, n=footprint_chart.latest_n_stations, bikes="%.0f"|format(footprint_chart.latest_bikes_total)) }}</p>
 {% endif %}
-</section>
-<section lang="en">
-<h2>The system's daily footprint</h2>
-{% if footprint_chart.status == "ok" %}
-<p>On {{ footprint_chart.latest_date }}, there were {{ footprint_chart.latest_n_stations }} stations and about {{ "%.0f"|format(footprint_chart.latest_bikes_total) }} bikes in the system.</p>
-{% endif %}
-</section>
 {% if footprint_chart.status == "ok" %}
 <figure>
 <svg viewBox="{{ footprint_chart.view_box }}" role="img" class="chart footprint"
-     aria-label="Räder im System je Tag, E-Bike/Pedal/unbekannt, auf Basis von {{ footprint_chart.full_days }} vollen Tagen / Bikes in the system per day, e-bike/pedal/unknown, based on {{ footprint_chart.full_days }} full days">
+     aria-label="{{ t("footprint.aria", full_days=footprint_chart.full_days) }}">
 {% for bar in footprint_chart.bars %}
 <rect x="{{ bar.bar_x }}" y="{{ bar.ebike_y }}" width="{{ bar.bar_width }}" height="{{ bar.ebike_height }}" fill="var(--series-1)"></rect>
 <rect x="{{ bar.bar_x }}" y="{{ bar.pedal_y }}" width="{{ bar.bar_width }}" height="{{ bar.pedal_height }}" fill="var(--series-2)"></rect>
 <rect x="{{ bar.bar_x }}" y="{{ bar.unknown_y }}" width="{{ bar.bar_width }}" height="{{ bar.unknown_height }}" fill="var(--series-3)"></rect>
 {% endfor %}
 </svg>
-<figcaption>
-<span lang="de">Räder im System je vollem Tag, aufgeteilt in E-Bike, Pedal und unbekannt, auf Basis von {{ footprint_chart.full_days }} vollen Tagen.</span>
-<span lang="en">Bikes in the system per full day, split into e-bike, pedal and unknown, based on {{ footprint_chart.full_days }} full days.</span>
-</figcaption>
+<figcaption>{{ t("footprint.caption", full_days=footprint_chart.full_days) }}</figcaption>
 </figure>
 <ul class="chart-legend">
-<li><span class="swatch" style="background: var(--series-1)"></span><span lang="de">E-Bike</span><span lang="en">e-bike</span></li>
-<li><span class="swatch" style="background: var(--series-2)"></span><span lang="de">Pedal</span><span lang="en">pedal</span></li>
-<li><span class="swatch" style="background: var(--series-3)"></span><span lang="de">unbekannt</span><span lang="en">unknown</span></li>
+<li><span class="swatch" style="background: var(--series-1)"></span><span>{{ t("footprint.legend.ebike") }}</span></li>
+<li><span class="swatch" style="background: var(--series-2)"></span><span>{{ t("footprint.legend.pedal") }}</span></li>
+<li><span class="swatch" style="background: var(--series-3)"></span><span>{{ t("footprint.legend.unknown") }}</span></li>
 </ul>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<summary>{{ t("common.show_table") }}</summary>
 <table>
-<caption>
-<span lang="de">Täglicher Fußabdruck des Systems</span>
-<span lang="en">System's daily footprint</span>
-</caption>
+<caption>{{ t("footprint.table.caption") }}</caption>
 <thead>
 <tr>
-<th scope="col"><span lang="de">Datum</span><span lang="en">Date</span></th>
-<th scope="col"><span lang="de">Stationen</span><span lang="en">Stations</span></th>
-<th scope="col"><span lang="de">Räder an Stationen</span><span lang="en">Bikes at stations</span></th>
-<th scope="col"><span lang="de">Free-floating</span><span lang="en">Free-floating</span></th>
-<th scope="col"><span lang="de">E-Bike</span><span lang="en">E-bike</span></th>
-<th scope="col"><span lang="de">Pedal</span><span lang="en">Pedal</span></th>
-<th scope="col"><span lang="de">Unbekannt</span><span lang="en">Unknown</span></th>
+<th scope="col">{{ t("footprint.col.date") }}</th>
+<th scope="col">{{ t("footprint.col.stations") }}</th>
+<th scope="col">{{ t("footprint.col.bikes_at_stations") }}</th>
+<th scope="col">{{ t("footprint.col.free_floating") }}</th>
+<th scope="col">{{ t("footprint.col.ebike") }}</th>
+<th scope="col">{{ t("footprint.col.pedal") }}</th>
+<th scope="col">{{ t("footprint.col.unknown") }}</th>
 </tr>
 </thead>
 <tbody>

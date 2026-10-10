@@ -50,7 +50,7 @@ def _table_rows(table):
 def test_table_has_one_row_per_full_day_matching_daily_footprint(synthetic_data_dir, tmp_path):
     site_dir = tmp_path / "site"
     build_site(synthetic_data_dir, site_dir)
-    html = (site_dir / "index.html").read_text()
+    html = (site_dir / "index.en.html").read_text()
 
     result = daily_footprint(connect(synthetic_data_dir))
     assert result.status == "ok"
@@ -78,7 +78,7 @@ def test_table_has_one_row_per_full_day_matching_daily_footprint(synthetic_data_
 def test_ebike_and_pedal_columns_match_expected_totals(synthetic_data_dir, tmp_path):
     site_dir = tmp_path / "site"
     build_site(synthetic_data_dir, site_dir)
-    html = (site_dir / "index.html").read_text()
+    html = (site_dir / "index.en.html").read_text()
 
     root = _parse(html)
     table = _footprint_table(root)
@@ -95,7 +95,7 @@ def test_svg_is_in_a_captioned_figure_followed_by_the_table(synthetic_data_dir, 
     site_dir = tmp_path / "site"
     build_site(synthetic_data_dir, site_dir)
 
-    root = _parse((site_dir / "index.html").read_text())
+    root = _parse((site_dir / "index.en.html").read_text())
     order: list = []
     _preorder(root, order)
 
@@ -127,10 +127,12 @@ def test_empty_data_dir_shows_not_enough_data_and_no_footprint_chart(tmp_path):
     lowered = html.lower()
     assert "noch nicht genug daten" in lowered
     assert "not enough data yet" not in lowered
-    en_lowered = (site_dir / "index.en.html").read_text().lower()
+    en_html = (site_dir / "index.en.html").read_text()
+    en_lowered = en_html.lower()
     assert "not enough data yet" in en_lowered
     assert "noch nicht genug daten" not in en_lowered
     assert "0/14" in html or "0 / 14" in html
+    assert "0/14" in en_html
 
     root = _parse(html)
     bar_svgs = [svg for svg in _find_all(root, "svg") if "footprint" in (svg.attrs.get("class") or "").split()]

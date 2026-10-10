@@ -83,6 +83,71 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "Verfügbare Räder je Bezirk und Uhrzeit (Mo-Fr)",
         "en": "Bikes available by Bezirk and local hour (Mo-Fr)",
     },
+    "flow.heading": {"de": "Netto-Fluss zwischen Bezirken", "en": "Net flow between Bezirke"},
+    "flow.intro": {
+        "de": "Netto gewonnene oder verlorene Räder je Bezirk und Uhrzeit, Mo-Fr im Mittel pro Tag (Europe/Berlin).",
+        "en": "Net bikes gained or lost per Bezirk by local hour, Mon-Fri mean per day (Europe/Berlin).",
+    },
+    "flow.aria": {
+        "de": "Räder gewonnen/verloren je Bezirk und Uhrzeit (0-23 Uhr, Mo-Fr im Mittel pro Tag, Europe/Berlin)",
+        "en": "Bikes gained/lost per Bezirk by local hour (0-23, Mon-Fri mean per day, Europe/Berlin)",
+    },
+    "flow.caption": {
+        "de": "Räder gewonnen (+) / verloren (-) je Bezirk und Uhrzeit (0–23 Uhr, Europe/Berlin), Mo-Fr im Mittel pro Tag, auf Basis von {full_days} vollen Tagen.",
+        "en": "Bikes gained (+) / lost (-) per Bezirk by local hour (0–23, Europe/Berlin), Mon-Fri mean per day, based on {full_days} full days.",
+    },
+    "flow.table.caption": {
+        "de": "Netto gewonnene/verlorene Räder je Bezirk und Uhrzeit (Mo-Fr)",
+        "en": "Net bikes gained/lost per Bezirk by local hour (Mo-Fr)",
+    },
+    "weather.heading": {"de": "Verfügbarkeit bei Regen und Kälte", "en": "Availability on rainy and cold hours"},
+    "weather.intro": {
+        "de": "Anteil leerer Stationen je Uhrzeit, bei Regen (&ge; {rain} mm/h) im Vergleich zu trocken, und bei Kälte (&lt; {cold} °C) im Vergleich zu warm (Europe/Berlin).",
+        "en": "Share of empty stations by local hour, rainy (&ge; {rain} mm/h) versus dry, and cold (&lt; {cold} &deg;C) versus warm (Europe/Berlin).",
+    },
+    "weather.kind.rain": {"de": "Regen", "en": "rain"},
+    "weather.kind.temperature": {"de": "Kälte", "en": "temperature"},
+    "weather.aria": {
+        "de": "Anteil leerer Stationen je Uhrzeit (0-23 Uhr, Europe/Berlin), {kind}",
+        "en": "Share of empty stations by local hour (0-23, Europe/Berlin), {kind}",
+    },
+    "weather.caption": {
+        "de": "Anteil leerer Stationen (%) je Uhrzeit (0–23 Uhr, Europe/Berlin), {kind}, auf Basis von {full_days} vollen Tagen; {excluded} Stunden ohne Wetterdaten ausgeschlossen.",
+        "en": "Share of empty stations (%) by local hour (0–23, Europe/Berlin), {kind}, based on {full_days} full days; {excluded} hours excluded for missing weather.",
+    },
+    "weather.table.caption": {
+        "de": "Anteil leerer Stationen je Uhrzeit, {kind}",
+        "en": "Share of empty stations by local hour, {kind}",
+    },
+    "weather.table.bucket": {"de": "Zustand", "en": "Bucket"},
+    "weather.missing": {
+        "de": "Für „{label}“ liegen noch keine Stunden vor.",
+        "en": "No hours classified as “{label}” yet.",
+    },
+    "footprint.heading": {"de": "Der tägliche Fußabdruck des Systems", "en": "The system's daily footprint"},
+    "footprint.summary": {
+        "de": "Am {date} gab es {n} Stationen und rund {bikes} Räder im System.",
+        "en": "On {date}, there were {n} stations and about {bikes} bikes in the system.",
+    },
+    "footprint.aria": {
+        "de": "Räder im System je Tag, E-Bike/Pedal/unbekannt, auf Basis von {full_days} vollen Tagen",
+        "en": "Bikes in the system per day, e-bike/pedal/unknown, based on {full_days} full days",
+    },
+    "footprint.caption": {
+        "de": "Räder im System je vollem Tag, aufgeteilt in E-Bike, Pedal und unbekannt, auf Basis von {full_days} vollen Tagen.",
+        "en": "Bikes in the system per full day, split into e-bike, pedal and unknown, based on {full_days} full days.",
+    },
+    "footprint.legend.ebike": {"de": "E-Bike", "en": "e-bike"},
+    "footprint.legend.pedal": {"de": "Pedal", "en": "pedal"},
+    "footprint.legend.unknown": {"de": "unbekannt", "en": "unknown"},
+    "footprint.table.caption": {"de": "Täglicher Fußabdruck des Systems", "en": "System's daily footprint"},
+    "footprint.col.date": {"de": "Datum", "en": "Date"},
+    "footprint.col.stations": {"de": "Stationen", "en": "Stations"},
+    "footprint.col.bikes_at_stations": {"de": "Räder an Stationen", "en": "Bikes at stations"},
+    "footprint.col.free_floating": {"de": "Free-floating", "en": "Free-floating"},
+    "footprint.col.ebike": {"de": "E-Bike", "en": "E-bike"},
+    "footprint.col.pedal": {"de": "Pedal", "en": "Pedal"},
+    "footprint.col.unknown": {"de": "Unbekannt", "en": "Unknown"},
 }
 
 

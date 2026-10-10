@@ -45,12 +45,16 @@ def _weather_svgs(root):
     return [svg for svg in _find_all(root, "svg") if "weather" in (svg.attrs.get("class") or "").split()]
 
 
-def _weather_table(root, kind_en: str):
+def _weather_table(root, caption_prefix: str, kind: str):
     for table in _find_all(root, "table"):
         captions = _find_all(table, "caption")
-        if captions and f"Share of empty stations by local hour, {kind_en}" in _text(captions[0]):
+        if captions and _text(captions[0]).strip() == f"{caption_prefix}, {kind}":
             return table
-    raise AssertionError(f"no weather table found for kind={kind_en!r}")
+    raise AssertionError(f"no weather table found for kind={kind!r}")
+
+
+def actual_labels(table):
+    return list(_table_values(table))
 
 
 def _table_values(table):
@@ -59,8 +63,8 @@ def _table_values(table):
     values = {}
     for row in body_rows:
         header = _find_all(row, "th")[0]
-        de_spans = [s for s in _find_all(header, "span") if s.attrs.get("lang") == "de"]
-        row_label = _text(de_spans[0]).strip() if de_spans else _text(header).strip()
+        assert not _find_all(header, "span"), "row labels must be plain single-language text"
+        row_label = _text(header).strip()
         cells = _find_all(row, "td")
         assert len(cells) == 24
         for hour, cell in enumerate(cells):
@@ -76,31 +80,46 @@ def test_thresholds_are_stated_in_the_text(synthetic_data_dir, tmp_path):
     assert f"{COLD_C_THRESHOLD:.1f}" in html
 
 
+_LABELS = {
+    "de": {"rainy": "regnerisch", "dry": "trocken", "cold": "kalt", "warm": "warm"},
+    "en": {"rainy": "rainy", "dry": "dry", "cold": "cold", "warm": "warm"},
+}
+_CAPTIONS = {
+    "de": ("Anteil leerer Stationen je Uhrzeit", {"rain": "Regen", "temperature": "Kälte"}),
+    "en": ("Share of empty stations by local hour", {"rain": "rain", "temperature": "temperature"}),
+}
+
+
+@pytest.mark.parametrize("lang", ["de", "en"])
 @pytest.mark.parametrize(
-    ("kind", "kind_en", "active_label_de", "other_label_de"),
+    ("kind", "active", "other"),
     [
-        ("rain", "rain", "regnerisch", "trocken"),
-        ("temperature", "temperature", "kalt", "warm"),
+        ("rain", "rainy", "dry"),
+        ("temperature", "cold", "warm"),
     ],
 )
-def test_table_matches_weather_effect_rows(
-    synthetic_data_dir, tmp_path, kind, kind_en, active_label_de, other_label_de
-):
+def test_table_matches_weather_effect_rows(synthetic_data_dir, tmp_path, kind, active, other, lang):
     data_dir, site_dir = _build_site_with_weather(synthetic_data_dir, tmp_path)
-    html = (site_dir / "index.html").read_text()
+    html = (site_dir / ("index.html" if lang == "de" else "index.en.html")).read_text()
+    labels = _LABELS[lang]
+    active_label_de, other_label_de = labels[active], labels[other]
 
     result = weather_effect(connect(data_dir), kind)
     assert result.status == "ok"
 
     expected: dict[tuple[str, int], str] = {}
-    label_by_bucket = {"rainy": "regnerisch", "dry": "trocken", "cold": "kalt", "warm": "warm"}
+    label_by_bucket = labels
     for bucket, local_hour, _mean, share, _n_snapshots, _n_hours in result.rows:
         if bucket == "excluded":
             continue
         expected[(label_by_bucket[bucket], local_hour)] = f"{share * 100:.1f}"
 
     root = _parse(html)
-    table = _weather_table(root, kind_en)
+    prefix, kinds = _CAPTIONS[lang]
+    table = _weather_table(root, prefix, kinds[kind])
+    # the other language's labels must not leak into this page's row labels
+    other_labels = set(_LABELS["en" if lang == "de" else "de"].values()) - set(labels.values())
+    assert not {label for label, _hour in actual_labels(table)} & other_labels
     actual = _table_values(table)
 
     assert (active_label_de, 8) in actual, "the active bucket (rainy/cold) must have a row"
@@ -155,8 +174,17 @@ def test_uncopied_synthetic_data_dir_has_no_weather_and_does_not_crash(synthetic
     assert not _weather_svgs(root), "no weather chart should render when every bucket is empty"
 
     lowered = html.lower()
-    assert "no hours classified as" in lowered
     assert "liegen noch keine stunden vor" in lowered
+    assert "no hours classified as" not in lowered
+    en_lowered = (site_dir / "index.en.html").read_text().lower()
+    assert "no hours classified as" in en_lowered
+    assert "liegen noch keine stunden vor" not in en_lowered
+    for de_label in ("regnerisch", "trocken", "kalt"):
+        assert f"„{de_label}“" in html.lower()
+        assert f"„{de_label}“" not in en_lowered
+    for en_label in ("rainy", "dry", "cold"):
+        assert f"“{en_label}”" in en_lowered
+        assert f"“{en_label}”" not in lowered
 
 
 def test_insufficient_data_shows_not_enough_data_and_no_weather_chart(tmp_path):
