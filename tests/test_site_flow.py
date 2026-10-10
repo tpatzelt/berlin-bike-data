@@ -49,7 +49,7 @@ def _expected_weekday_net_by_hour(con) -> dict[tuple[str, int], float]:
 def test_flow_table_matches_metric_and_svg_precedes_it(synthetic_data_dir, tmp_path):
     site_dir = tmp_path / "site"
     build_site(synthetic_data_dir, site_dir)
-    html = (site_dir / "index.html").read_text()
+    html = (site_dir / "index.en.html").read_text()
 
     expected = _expected_weekday_net_by_hour(connect(synthetic_data_dir))
 
@@ -104,7 +104,7 @@ def test_flow_table_matches_metric_and_svg_precedes_it(synthetic_data_dir, tmp_p
 def test_bz_c_cancels_to_zero_and_bz_a_reverses_morning_evening(synthetic_data_dir, tmp_path):
     site_dir = tmp_path / "site"
     build_site(synthetic_data_dir, site_dir)
-    html = (site_dir / "index.html").read_text()
+    html = (site_dir / "index.en.html").read_text()
 
     expected = _expected_weekday_net_by_hour(connect(synthetic_data_dir))
 
@@ -133,7 +133,7 @@ def test_empty_data_dir_shows_not_enough_data_and_no_flow_chart(tmp_path):
     site_dir = tmp_path / "site"
     build_site(data_dir, site_dir)
 
-    root = _parse((site_dir / "index.html").read_text())
+    root = _parse((site_dir / "index.en.html").read_text())
     article = _flow_article(root)
 
     not_enough = [p for p in _find_all(article, "p") if p.attrs.get("class") == "not-enough-data"]
