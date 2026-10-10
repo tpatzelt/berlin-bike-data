@@ -11,6 +11,8 @@
 
   function $(id) { return document.getElementById(id); }
 
+  var I18N = JSON.parse($("map-i18n").textContent);
+
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
@@ -105,7 +107,7 @@
     $("pick-station").value = "";
     $("pick-ortsteil").value = name;
     state.curve = ortsteil.curve;
-    state.title = "Ortsteil " + name;
+    state.title = I18N.ortsteil_title.replace("{name}", function () { return name; });
     highlight(null);
     render();
   }
@@ -130,11 +132,10 @@
   function init(data) {
     state.data = data;
     if (data.status !== "ok") {
-      showStatus((data.message || "not enough data yet / noch nicht genug Daten") +
-        " (" + data.full_days + " / 14)");
+      showStatus(I18N.not_enough_data + " (" + data.full_days + " / 14)");
       return;
     }
-    $("profile-days").textContent = "(" + data.full_days + " days / Tage)";
+    $("profile-days").textContent = I18N.days.replace("{n}", data.full_days);
     data.stations.forEach(function (s) { $("pick-station").appendChild(option(s.id, s.name)); });
     data.ortsteile.forEach(function (o) { $("pick-ortsteil").appendChild(option(o.name, o.name)); });
     $("pick-station").addEventListener("change", function (e) { pickStation(e.target.value); });
@@ -148,6 +149,6 @@
     fetch("data/profiles.json")
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(init)
-      .catch(function () { showStatus("Daten konnten nicht geladen werden / Could not load data."); });
+      .catch(function () { showStatus(I18N.load_error); });
   });
 })();

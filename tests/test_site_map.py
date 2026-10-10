@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from html.parser import HTMLParser
+from pathlib import Path
 
 import pytest
 
@@ -81,3 +83,64 @@ def test_legal_pages_render_operator_details_and_third_parties(map_site, tmp_pat
     (tmp_path / "d").mkdir()
     build_site(tmp_path / "d", tmp_path / "s")
     assert "[NAME]" in (tmp_path / "s" / "impressum.html").read_text()
+
+
+class _LangCollector(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.html_lang = None
+        self.nested_langs = []
+        self.i18n_json = None
+        self._in_i18n = False
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "html":
+            self.html_lang = a.get("lang")
+        elif a.get("lang") and not (tag == "a" and "lang-switch" in (a.get("class") or "")):
+            self.nested_langs.append(a["lang"])
+        if tag == "script" and a.get("id") == "map-i18n":
+            self._in_i18n = True
+
+    def handle_data(self, data):
+        if self._in_i18n:
+            self.i18n_json = (self.i18n_json or "") + data
+
+    def handle_endtag(self, tag):
+        if tag == "script":
+            self._in_i18n = False
+
+
+def _collect(path):
+    c = _LangCollector()
+    c.feed(path.read_text())
+    return c
+
+
+def test_map_pages_are_single_language(map_site):
+    de, en = _collect(map_site / "map.html"), _collect(map_site / "map.en.html")
+    assert (de.html_lang, en.html_lang) == ("de", "en")
+    assert de.nested_langs == [] and en.nested_langs == []
+    for page in ("map.html", "map.en.html"):
+        assert " / " not in (map_site / page).read_text().split("<main", 1)[1].split("</main>")[0].replace("14", "")
+
+
+def test_map_i18n_json_is_per_language_and_complete(map_site):
+    de = json.loads(_collect(map_site / "map.html").i18n_json)
+    en = json.loads(_collect(map_site / "map.en.html").i18n_json)
+    assert set(de) == set(en) == {"days", "ortsteil_title", "not_enough_data", "load_error"}
+    assert de["days"] == "({n} Tage)" and en["days"] == "({n} days)"
+    assert de["load_error"].startswith("Daten") and en["load_error"].startswith("Could not")
+    assert en["ortsteil_title"] == "District {name}"
+
+
+def test_map_js_has_no_inline_bilingual_strings():
+    js = (Path(__file__).parent.parent / "src/berlinbikes/site/static/map.js").read_text()
+    for fragment in ("Tage", " days", "Could not", "Daten konnten", "Ortsteil ", "data.message"):
+        assert fragment not in js
+    assert "map-i18n" in js
+
+
+def test_map_weekday_options_follow_page_language(map_site):
+    assert "<option value=\"0\" selected>Montag</option>" in (map_site / "map.html").read_text()
+    assert "<option value=\"6\">Sunday</option>" in (map_site / "map.en.html").read_text()
