@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ t("title.datenschutz") }}{% endblock %}
 {% block content %}
-<section lang="de">
-<h2>Datenschutzerklärung</h2>
+<h2>{{ t("datenschutz.h2") }}</h2>
+{% if lang == "de" %}
 <p>Verantwortlicher im Sinne der DSGVO:</p>
 <address>
 {{ operator.name }}<br>
@@ -17,9 +17,12 @@
 <p>Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung und Widerspruch sowie das Recht auf Beschwerde bei einer Aufsichtsbehörde, in Berlin bei der Berliner Beauftragten für Datenschutz und Informationsfreiheit.</p>
 <h3>Die Daten der Seite selbst</h3>
 <p>Die ausgewerteten Daten stammen aus dem öffentlichen GBFS-Feed von nextbike. Fahrrad-IDs werden nie gespeichert; es gibt keine Daten über einzelne Fahrten oder Personen.</p>
-</section>
-<section lang="en">
-<h2>Privacy</h2>
+{% else %}
+<address>
+{{ operator.name }}<br>
+{{ operator.address }}<br>
+<a href="mailto:{{ operator.email }}">{{ operator.email }}</a>
+</address>
 <p>No cookies, no analytics, no tracking, no accounts. The site is served through Cloudflare; Cloudflare and the server process technically necessary request data (IP address, time, URL, user agent), and the server keeps short-lived access logs for security. Opening the map loads Leaflet from unpkg.com and map tiles from tile.openstreetmap.org, which receive your IP address. Bike ids from the feed are never stored, so there is no data about individual trips or people.</p>
-</section>
+{% endif %}
 {% endblock %}

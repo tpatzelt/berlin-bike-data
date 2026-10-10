@@ -79,6 +79,8 @@ def test_legal_pages_render_operator_details_and_third_parties(map_site, tmp_pat
     assert "Erika Muster" in impressum and "Musterstr. 1" in impressum and "[NAME]" not in impressum
     privacy = (map_site / "datenschutz.html").read_text()
     assert "tile.openstreetmap.org" in privacy and "unpkg.com" in privacy and "Cloudflare" in privacy
+    privacy_en = (map_site / "datenschutz.en.html").read_text()
+    assert "tile.openstreetmap.org" in privacy_en and "unpkg.com" in privacy_en and "Cloudflare" in privacy_en
 
     (tmp_path / "d").mkdir()
     build_site(tmp_path / "d", tmp_path / "s")
@@ -145,3 +147,20 @@ def test_map_js_has_no_inline_bilingual_strings():
 def test_map_weekday_options_follow_page_language(map_site):
     assert "<option value=\"0\" selected>Montag</option>" in (map_site / "map.html").read_text()
     assert "<option value=\"6\">Sunday</option>" in (map_site / "map.en.html").read_text()
+
+
+def test_legal_pages_are_one_language_each_with_operator_block(map_site):
+    for page in ("impressum", "datenschutz"):
+        de = (map_site / f"{page}.html").read_text()
+        en = (map_site / f"{page}.en.html").read_text()
+        assert "<section" not in de and "<section" not in en
+        for html in (de, en):
+            assert "<address>" in html and "Musterstr. 1" in html
+    imp_de = (map_site / "impressum.html").read_text()
+    imp_en = (map_site / "impressum.en.html").read_text()
+    assert "Angaben gemäß § 5 DDG" in imp_de and "A private, non-commercial" not in imp_de
+    assert "A private, non-commercial" in imp_en and "Angaben gemäß" not in imp_en
+    ds_de = (map_site / "datenschutz.html").read_text()
+    ds_en = (map_site / "datenschutz.en.html").read_text()
+    assert "Ihre Rechte" in ds_de and "Ihre Rechte" not in ds_en
+    assert "No cookies, no analytics" in ds_en and "No cookies, no analytics" not in ds_de
