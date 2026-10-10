@@ -3,6 +3,7 @@
   --fg: #1a1a1a;
   --accent: #0a6ebd;
   --muted: #6b6b6b;
+  --grid: #dcdcdc;
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-3: #1baf7a;
@@ -18,6 +19,7 @@
     --fg: #f0f0f0;
     --accent: #6ab0f3;
     --muted: #a0a0a0;
+    --grid: #3a3a3a;
     --series-1: #3987e5;
     --series-2: #d95926;
     --series-3: #199e70;
@@ -55,6 +57,18 @@ svg.chart { display: block; width: 100%; height: auto; }
 .chart-legend li { display: flex; align-items: center; gap: 0.35rem; }
 
 .chart-legend .swatch { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 2px; }
+
+svg.chart .grid { stroke: var(--grid); stroke-width: 1; }
+
+svg.chart .axis .tick { fill: var(--muted); }
+
+svg.chart .axis-title { fill: var(--fg); }
+
+svg.chart .headline circle { fill: var(--fg); stroke: var(--bg); stroke-width: 2; }
+
+svg.chart .headline text { fill: var(--fg); paint-order: stroke; stroke: var(--bg); stroke-width: 4; }
+
+.chart-legend .swatch-line { display: block; }
 
 svg.bars text { font-size: 10px; fill: var(--fg); }
 
