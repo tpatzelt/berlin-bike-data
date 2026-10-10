@@ -199,3 +199,15 @@ def test_flow_chart_has_labelled_zero_line_axes_and_loss_headline(synthetic_data
     figure = _figure_html(html, "flow")
     legend = figure[figure.index('class="chart-legend"') :]
     assert legend.count("swatch-line") == len(BEZIRKE)
+
+
+def test_flow_chart_ok_result_without_weekday_rows_has_no_headline(tmp_path, monkeypatch):
+    from berlinbikes.analysis import MetricResult
+
+    empty = MetricResult(name="net_flow_by_bezirk", full_days=20, status="ok", message=None, rows=[])
+    monkeypatch.setattr(charts, "net_flow_by_bezirk", lambda con: empty)
+    monkeypatch.setattr(charts, "connect", lambda data_dir: None)
+    chart = charts.flow_chart(tmp_path)
+    assert chart.status == "ok"
+    assert chart.bezirke == []
+    assert chart.headline is None

@@ -488,10 +488,14 @@ def flow_chart(data_dir: str | Path) -> FlowChart:
 
     # The largest net loss between 6:00 and 10:00; no headline if nothing is lost.
     lo_hour, hi_hour = HEADLINE_HOURS
-    loss, hour, name = min(
+    candidates = [
         (series.hours[h], h, series.name) for series in bezirke for h in range(lo_hour, hi_hour + 1)
-    )
-    headline = _make_headline(axes, loss, hour, name, max(len(name), 24)) if loss < 0 else None
+    ]
+    headline = None
+    if candidates:
+        loss, hour, name = min(candidates)
+        if loss < 0:
+            headline = _make_headline(axes, loss, hour, name, max(len(name), 24))
 
     return FlowChart(
         status="ok",
