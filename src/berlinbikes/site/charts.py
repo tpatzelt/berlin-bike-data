@@ -789,17 +789,28 @@ def _weather_kind_chart(kind: str, by_bucket: dict[str, dict[int, float]], exclu
             )
         )
 
-    # Direct labels at the right end of each line: the higher end above its line, the lower below.
+    # Direct labels at each line's own last plotted point (anchored "end", so they stay inside the plot):
+    # the higher end sits above its line, the lower below; ties put the active bucket above.
     ends = []
     for series in buckets:
         last = max(h for h, v in enumerate(series.hours) if v is not None)
         ends.append((axes.scale_y(series.hours[last]), last, series))
     labelled = []
     for y, last, series in ends:
-        higher = all(y <= other_y for other_y, _l, _s in ends)
-        label_y = y - 8 if higher else y + CHART_FONT_SIZE + 2
+        others = [oy for oy, _l, s in ends if s is not series]
+        if series.bucket == active_bucket:
+            above = all(y <= oy for oy in others)
+        else:
+            above = all(y < oy for oy in others)
+        label_y = y - 8 if above else y + CHART_FONT_SIZE + 2
         label_y = max(axes.top + CHART_FONT_SIZE * 0.8, min(label_y, axes.bottom - 4))
-        labelled.append(replace(series, label_x=axes.right, label_y=label_y))
+        labelled.append(replace(series, label_x=x_of(last), label_y=label_y))
+    # Clamping to the plot box can push the two labels together; keep them a line apart.
+    if len(labelled) == 2:
+        top, bottom = sorted(labelled, key=lambda s: (s.label_y, s.bucket != active_bucket))
+        if bottom.label_y - top.label_y < CHART_FONT_SIZE:
+            top_y = bottom.label_y - CHART_FONT_SIZE
+            labelled = [replace(s, label_y=top_y) if s is top else s for s in labelled]
     buckets = [next(s for s in labelled if s.bucket == b.bucket) for b in buckets]
 
     # 8:00 markers from the plotted values only; the label sits at the lowest one.

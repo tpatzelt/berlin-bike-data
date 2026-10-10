@@ -21,6 +21,7 @@ import pytest
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.weather_effect import COLD_C_THRESHOLD, RAIN_MM_THRESHOLD, weather_effect
 from berlinbikes.site import build_site
+from berlinbikes.site.charts import CHART_FONT_SIZE
 from tests.helpers.svg import assert_axes_conventions, polyline_dasharrays
 from tests.test_metric_weather import _write_weather_day
 from tests.test_site_article import _ancestors, _find_all, _parse, _preorder, _text
@@ -235,6 +236,15 @@ def test_weather_charts_have_shared_axes_dashes_and_labels(synthetic_data_dir, t
         assert dashes[0] not in ("none", "") and dashes[1] == "none"
         series_labels = [e["text"] for e in els if "series-label" in e["classes"]]
         assert series_labels == [labels[active], labels[other]]
+        # each label sits at its own line's last point, and the two never overprint
+        polys = [e for e in els if e["tag"] == "polyline"]
+        texts = [e for e in els if "series-label" in e["classes"]]
+        positions = [(float(t["attrs"]["x"]), float(t["attrs"]["y"])) for t in texts]
+        assert positions[0] != positions[1]
+        assert abs(positions[0][1] - positions[1][1]) >= CHART_FONT_SIZE
+        for poly, (lx, _ly) in zip(polys, positions):
+            last_x = float(poly["attrs"]["points"].split()[-1].split(",")[0])
+            assert abs(lx - last_x) <= 2 * CHART_FONT_SIZE
         assert "chart-legend" not in svg
         # headline: both plotted 8:00 values
         result = weather_effect(connect(data_dir), kind)
