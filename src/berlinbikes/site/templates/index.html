@@ -1,24 +1,27 @@
 {% extends "base.html" %}
 {% block title %}{{ t("title.index") }}{% endblock %}
 {% block content %}
+{% import "_chart.html" as chart %}
 <article id="availability">
 <h2>{{ t("availability.heading") }}</h2>
 <p>{{ t("availability.intro") }}</p>
 {% if availability_chart.status == "ok" %}
 <figure>
-<svg viewBox="{{ availability_chart.view_box }}" role="img" class="chart"
+<svg viewBox="{{ availability_chart.view_box }}" role="img" class="chart" font-size="{{ availability_chart.axes.font_size }}"
      aria-label="{{ t("availability.aria") }}">
+{{ chart.axes_frame(availability_chart.axes, t("availability.axis.x"), t("availability.axis.y")) }}
 {% for wd in availability_chart.weekdays %}
-<polyline points="{{ wd.points }}" fill="none" stroke="var(--series-{{ wd.index + 1 }})" stroke-width="2"></polyline>
+<polyline points="{{ wd.points }}" fill="none" stroke="var(--series-{{ wd.index + 1 }})" stroke-width="2" stroke-dasharray="{{ wd.dasharray }}"></polyline>
 {% endfor %}
+{{ chart.headline(availability_chart.headline, t("availability.headline", value="%.0f"|format(availability_chart.headline.value), hour=availability_chart.headline.hour)) }}
 </svg>
+{% set legend_items = [] %}
+{% for wd in availability_chart.weekdays %}
+{% set _ = legend_items.append({"color": "var(--series-" ~ (wd.index + 1) ~ ")", "dasharray": wd.dasharray, "label": t("weekday.short." ~ wd.index)}) %}
+{% endfor %}
+{{ chart.dash_legend(legend_items) }}
 <figcaption>{{ t("availability.caption", full_days=availability_chart.full_days) }}</figcaption>
 </figure>
-<ul class="chart-legend">
-{% for wd in availability_chart.weekdays %}
-<li><span class="swatch" style="background: var(--series-{{ wd.index + 1 }})"></span><span>{{ t("weekday.short." ~ wd.index) }}</span></li>
-{% endfor %}
-</ul>
 <details>
 <summary>{{ t("common.show_table") }}</summary>
 <table>

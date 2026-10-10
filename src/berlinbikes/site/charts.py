@@ -40,6 +40,7 @@ of bikes in the system that day, colored via ``--series-1`` (e-bike),
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -68,6 +69,106 @@ _PAD_TOP = 10
 _PAD_BOTTOM = 20
 
 
+#: Root font-size (viewBox units) of charts drawn with :class:`Axes`. At the
+#: 328px content width of a 360px viewport it renders at
+#: ``CHART_FONT_SIZE * 328 / VIEW_WIDTH`` px, which must stay >= 11.
+CHART_FONT_SIZE = 16.5
+
+#: One stroke-dasharray per weekday (Monday solid), so the lines differ by more than color.
+WEEKDAY_DASHARRAYS = ("none", "7 4", "2 3", "9 3 2 3", "12 5", "3 2 1 2", "1 4")
+
+#: Local hours between which the headline looks for the Mon-Fri dip.
+HEADLINE_HOURS = (6, 10)
+
+_AXES_PAD_LEFT = 68
+_AXES_PAD_RIGHT = 12
+_AXES_PAD_TOP = 14
+_AXES_PAD_BOTTOM = 62
+_AXES_VIEW_HEIGHT = 300
+
+
+def nice_ticks(lo: float, hi: float, target: int = 5) -> list[float]:
+    """Round tick values (step 1/2/5 x 10^n) covering ``[lo, hi]``; first <= lo, last >= hi."""
+    if hi <= lo:
+        hi = lo + 1.0
+    raw = (hi - lo) / max(target, 1)
+    magnitude = 10 ** math.floor(math.log10(raw))
+    step = next(m * magnitude for m in (1, 2, 5, 10) if m * magnitude >= raw)
+    first = math.floor(lo / step + 1e-9)
+    last = math.ceil(hi / step - 1e-9)
+    return [round(i * step, 10) for i in range(first, last + 1)]
+
+
+@dataclass(frozen=True)
+class Tick:
+    pos: float
+    label: str
+
+
+@dataclass(frozen=True)
+class Axes:
+    """Geometry of a framed line chart: plot box, ticks, and title positions (in viewBox units)."""
+
+    view_box: str
+    font_size: float
+    left: float
+    right: float
+    top: float
+    bottom: float
+    x_ticks: list[Tick]
+    y_ticks: list[Tick]
+    y_min: float
+    y_max: float
+    x_title_x: float
+    x_title_y: float
+    y_title_x: float
+    y_title_y: float
+
+    def scale_y(self, value: float) -> float:
+        return self.bottom - (value - self.y_min) / (self.y_max - self.y_min) * (self.bottom - self.top)
+
+
+def _fmt_tick(value: float) -> str:
+    return f"{value:g}"
+
+
+def build_axes(y_lo: float, y_hi: float, x_tick_hours: tuple[int, ...] = (0, 4, 8, 12, 16, 20, 23)) -> Axes:
+    """Axes for a 0-23 local-hour x axis and a y axis rounded outward to nice ticks."""
+    y_values = nice_ticks(y_lo, y_hi)
+    y_min, y_max = y_values[0], y_values[-1]
+    left, right = _AXES_PAD_LEFT, VIEW_WIDTH - _AXES_PAD_RIGHT
+    top, bottom = _AXES_PAD_TOP, _AXES_VIEW_HEIGHT - _AXES_PAD_BOTTOM
+    axes = Axes(
+        view_box=f"0 0 {VIEW_WIDTH} {_AXES_VIEW_HEIGHT}",
+        font_size=CHART_FONT_SIZE,
+        left=left,
+        right=right,
+        top=top,
+        bottom=bottom,
+        x_ticks=[Tick(left + h / 23 * (right - left), str(h)) for h in x_tick_hours],
+        y_ticks=[],
+        y_min=y_min,
+        y_max=y_max,
+        x_title_x=(left + right) / 2,
+        x_title_y=_AXES_VIEW_HEIGHT - 6,
+        y_title_x=CHART_FONT_SIZE,
+        y_title_y=(top + bottom) / 2,
+    )
+    y_ticks = [Tick(axes.scale_y(v), _fmt_tick(v)) for v in y_values]
+    return Axes(**{**axes.__dict__, "y_ticks": y_ticks})
+
+
+@dataclass(frozen=True)
+class Headline:
+    """The marked point: pixel position, plotted value and local hour."""
+
+    x: float
+    y: float
+    value: float
+    hour: int
+    anchor: str
+
+
 @dataclass(frozen=True)
 class WeekdaySeries:
     index: int
@@ -75,6 +176,7 @@ class WeekdaySeries:
     name_en: str
     points: str
     hours: list[float]
+    dasharray: str = "none"
 
 
 @dataclass(frozen=True)
@@ -84,6 +186,8 @@ class AvailabilityChart:
     message: str | None
     view_box: str
     weekdays: list[WeekdaySeries] | None
+    axes: Axes | None = None
+    headline: Headline | None = None
 
 
 def _scale_x(hour: int) -> float:
@@ -115,26 +219,47 @@ def availability_chart(data_dir: str | Path) -> AvailabilityChart:
         (weekday, hour): mean for weekday, hour, mean, _n in result.rows
     }
     all_values = [mean for _weekday, _hour, mean, _n in result.rows]
-    y_min, y_max = min(all_values), max(all_values)
-    y_span = (y_max - y_min) or 1.0
+    axes = build_axes(min(all_values), max(all_values))
+
+    def x_of(hour: int) -> float:
+        return axes.left + hour / 23 * (axes.right - axes.left)
 
     weekdays = []
     for index, (name_de, name_en) in enumerate(WEEKDAY_NAMES):
         hours = [grid[(index, hour)] for hour in range(24)]
-        points = " ".join(
-            f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}"
-            for hour, value in enumerate(hours)
-        )
+        points = " ".join(f"{x_of(hour):.1f},{axes.scale_y(value):.1f}" for hour, value in enumerate(hours))
         weekdays.append(
-            WeekdaySeries(index=index, name_de=name_de, name_en=name_en, points=points, hours=hours)
+            WeekdaySeries(
+                index=index,
+                name_de=name_de,
+                name_en=name_en,
+                points=points,
+                hours=hours,
+                dasharray=WEEKDAY_DASHARRAYS[index],
+            )
         )
+
+    # The lowest Mon-Fri value in the morning window, from the plotted values only.
+    lo_hour, hi_hour = HEADLINE_HOURS
+    dip_value, dip_hour = min(
+        (weekdays[d].hours[h], h) for d in range(5) for h in range(lo_hour, hi_hour + 1)
+    )
+    headline = Headline(
+        x=x_of(dip_hour),
+        y=axes.scale_y(dip_value),
+        value=dip_value,
+        hour=dip_hour,
+        anchor="start" if dip_hour < 14 else "end",
+    )
 
     return AvailabilityChart(
         status="ok",
         full_days=result.full_days,
         message=None,
-        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        view_box=axes.view_box,
         weekdays=weekdays,
+        axes=axes,
+        headline=headline,
     )
 
 

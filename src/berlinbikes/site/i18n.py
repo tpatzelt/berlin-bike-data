@@ -45,6 +45,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "Verfügbare Räder je Uhrzeit (0–23 Uhr, Europe/Berlin) und Wochentag (Mo–So), auf Basis von {full_days} vollen Tagen.",
         "en": "Bikes available by local hour (0–23, Europe/Berlin) and weekday (Mon–Sun), based on {full_days} full days.",
     },
+    "availability.axis.x": {"de": "Uhrzeit (Uhr, Europe/Berlin)", "en": "Local hour (h, Europe/Berlin)"},
+    "availability.axis.y": {"de": "Verfügbare Räder (Anzahl)", "en": "Bikes available (count)"},
+    "availability.headline": {"de": "{value} Räder um {hour}:00", "en": "{value} bikes at {hour}:00"},
     "availability.table.caption": {
         "de": "Verfügbare Räder je Wochentag und Uhrzeit",
         "en": "Bikes available by weekday and local hour",
