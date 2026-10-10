@@ -62,9 +62,9 @@ def chart_elements(html: str, first_n: int = 1) -> list[dict]:
     return out
 
 
-def assert_axes_conventions(html: str) -> list[dict]:
+def assert_axes_conventions(html: str, n: int = 1) -> list[dict]:
     """Tick labels on both axes, gridlines, titles with a unit in parentheses, a headline."""
-    els = chart_elements(html)
+    els = chart_elements(html, n)
     assert els, "no chart svg"
     for axis in ("axis-x", "axis-y"):
         ticks = [e for e in els if e["tag"] == "text" and "tick" in e["classes"] and axis in e["groups"]]

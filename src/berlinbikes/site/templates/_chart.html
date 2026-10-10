@@ -22,11 +22,16 @@
 <text class="axis-title axis-title-y" x="{{ axes.y_title_x }}" y="{{ axes.y_title_y }}" text-anchor="middle" transform="rotate(-90 {{ axes.y_title_x }} {{ axes.y_title_y }})">{{ y_title }}</text>
 {% endmacro %}
 
-{# A marked point with a label, drawn on top of the series. #}
+{# A marked point with a label, drawn on top of the series. A Bezirk name goes on its own first line. #}
 {% macro headline(point, label) %}
 <g class="headline">
 <circle cx="{{ "%.1f"|format(point.x) }}" cy="{{ "%.1f"|format(point.y) }}" r="5"></circle>
-<text x="{{ "%.1f"|format(point.x + (10 if point.anchor == "start" else -10)) }}" y="{{ "%.1f"|format(point.label_y) }}" text-anchor="{{ point.anchor }}">{{ label }}</text>
+{% if point.name %}
+<text text-anchor="{{ point.anchor }}"><tspan x="{{ "%.1f"|format(point.label_x) }}" y="{{ "%.1f"|format(point.label_y) }}">{{ point.name }}</tspan>
+<tspan x="{{ "%.1f"|format(point.label_x) }}" dy="1.1em">{{ label }}</tspan></text>
+{% else %}
+<text x="{{ "%.1f"|format(point.label_x) }}" y="{{ "%.1f"|format(point.label_y) }}" text-anchor="{{ point.anchor }}">{{ label }}</text>
+{% endif %}
 </g>
 {% endmacro %}
 
