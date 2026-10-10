@@ -213,19 +213,35 @@
 {% for kind_chart, kind_key in [(weather_chart.rain, "rain"), (weather_chart.temperature, "temperature")] %}
 {% if kind_chart.buckets %}
 <figure>
-<svg viewBox="{{ kind_chart.view_box }}" role="img" class="chart weather" data-kind="{{ kind_chart.kind }}"
+<svg viewBox="{{ kind_chart.view_box }}" role="img" class="chart weather" data-kind="{{ kind_chart.kind }}" font-size="{{ kind_chart.axes.font_size }}"
      aria-label="{{ t("weather.aria", kind=t("weather.kind." ~ kind_key)) }}">
+{{ chart.axes_frame(kind_chart.axes, t("weather.axis.x"), t("weather.axis.y")) }}
 {% for bucket in kind_chart.buckets %}
-<polyline points="{{ bucket.points }}" fill="none" stroke="var(--series-{{ bucket.color_index }})" stroke-width="2"></polyline>
+<polyline points="{{ bucket.points }}" fill="none" stroke="var(--series-{{ bucket.color_index }})" stroke-width="2" stroke-dasharray="{{ bucket.dasharray }}"></polyline>
 {% endfor %}
+{% for bucket in kind_chart.buckets %}
+<text class="series-label" x="{{ "%.1f"|format(bucket.label_x) }}" y="{{ "%.1f"|format(bucket.label_y) }}" text-anchor="end">{{ bucket["label_" ~ lang] }}</text>
+{% endfor %}
+{% if kind_chart.headline %}
+{% set vals = [] %}
+{% for bucket in kind_chart.buckets %}
+{% if bucket.hours[8] is not none %}{% set _ = vals.append((bucket["label_" ~ lang], (("%.1f"|format(bucket.hours[8]))|replace(".", ",") if lang == "de" else "%.1f"|format(bucket.hours[8])))) %}{% endif %}
+{% endfor %}
+{% if vals|length == 2 %}
+{% set label = t("weather.headline.both", first=vals[0][0], first_value=vals[0][1], second=vals[1][0], second_value=vals[1][1]) %}
+{% else %}
+{% set label = t("weather.headline.single", first=vals[0][0], first_value=vals[0][1]) %}
+{% endif %}
+{{ chart.headline(kind_chart.headline, label) }}
+{% for point in kind_chart.headline_points %}
+{% if point != kind_chart.headline %}
+<g class="headline"><circle cx="{{ "%.1f"|format(point.x) }}" cy="{{ "%.1f"|format(point.y) }}" r="5"></circle></g>
+{% endif %}
+{% endfor %}
+{% endif %}
 </svg>
 <figcaption>{{ t("weather.caption", kind=t("weather.kind." ~ kind_key), full_days=weather_chart.full_days, excluded=kind_chart.excluded_n_hours) }}</figcaption>
 </figure>
-<ul class="chart-legend">
-{% for bucket in kind_chart.buckets %}
-<li><span class="swatch" style="background: var(--series-{{ bucket.color_index }})"></span><span>{{ bucket["label_" ~ lang] }}</span></li>
-{% endfor %}
-</ul>
 <details>
 <summary>{{ t("common.show_table") }}</summary>
 <table>

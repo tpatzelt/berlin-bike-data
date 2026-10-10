@@ -699,6 +699,16 @@ _WEATHER_KIND_BUCKETS: dict[str, tuple[str, str]] = {
 }
 
 
+#: Hour of the weather headline, where both buckets' values are marked.
+WEATHER_HEADLINE_HOUR = 8
+
+#: Longest headline label (characters) the weather charts reserve room for.
+WEATHER_HEADLINE_CHARS = 32
+
+#: stroke-dasharray of the active bucket (rainy/cold); the baseline stays solid.
+WEATHER_ACTIVE_DASHARRAY = "7 4"
+
+
 @dataclass(frozen=True)
 class WeatherBucketSeries:
     bucket: str
@@ -707,6 +717,9 @@ class WeatherBucketSeries:
     color_index: int
     points: str
     hours: list[float | None]
+    dasharray: str = "none"
+    label_x: float = 0.0
+    label_y: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -716,6 +729,11 @@ class WeatherKindChart:
     excluded_n_hours: int
     buckets: list[WeatherBucketSeries]
     missing_buckets: list[tuple[str, str]]
+    axes: Axes | None = None
+    #: Markers of the plotted 8:00 values, one per bucket that has one.
+    headline_points: list[Headline] | None = None
+    #: The point carrying the label text (the lowest marker), or None.
+    headline: Headline | None = None
 
 
 @dataclass(frozen=True)
@@ -727,24 +745,27 @@ class WeatherEffectChart:
     temperature: WeatherKindChart | None
 
 
-def _weather_kind_chart(kind: str, rows) -> WeatherKindChart:
-    active_bucket, other_bucket = _WEATHER_KIND_BUCKETS[kind]
-    by_bucket: dict[str, dict[int, float]] = {active_bucket: {}, other_bucket: {}}
+def _weather_values(rows) -> tuple[dict[str, dict[int, float]], int]:
+    by_bucket: dict[str, dict[int, float]] = {}
     excluded_n_hours = 0
     for bucket, local_hour, _mean, share, _n_snapshots, n_hours in rows:
         if bucket == "excluded":
             excluded_n_hours = n_hours
             continue
-        by_bucket[bucket][local_hour] = share * 100
+        by_bucket.setdefault(bucket, {})[local_hour] = share * 100
+    return by_bucket, excluded_n_hours
 
-    all_values = [0.0] + [v for values in by_bucket.values() for v in values.values()]
-    y_min, y_max = min(all_values), max(all_values)
-    y_span = (y_max - y_min) or 1.0
+
+def _weather_kind_chart(kind: str, by_bucket: dict[str, dict[int, float]], excluded_n_hours: int, axes: Axes) -> WeatherKindChart:
+    active_bucket, other_bucket = _WEATHER_KIND_BUCKETS[kind]
+
+    def x_of(hour: int) -> float:
+        return axes.left + hour / 23 * (axes.right - axes.left)
 
     buckets: list[WeatherBucketSeries] = []
     missing_buckets: list[tuple[str, str]] = []
     for index, bucket in enumerate((active_bucket, other_bucket)):
-        values = by_bucket[bucket]
+        values = by_bucket.get(bucket, {})
         label_de, label_en = _WEATHER_BUCKET_LABELS[bucket]
         if not values:
             missing_buckets.append((label_de, label_en))
@@ -755,7 +776,7 @@ def _weather_kind_chart(kind: str, rows) -> WeatherKindChart:
             value = values.get(hour)
             hours.append(value)
             if value is not None:
-                points_parts.append(f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}")
+                points_parts.append(f"{x_of(hour):.1f},{axes.scale_y(value):.1f}")
         buckets.append(
             WeatherBucketSeries(
                 bucket=bucket,
@@ -764,15 +785,43 @@ def _weather_kind_chart(kind: str, rows) -> WeatherKindChart:
                 color_index=index + 1,
                 points=" ".join(points_parts),
                 hours=hours,
+                dasharray=WEATHER_ACTIVE_DASHARRAY if bucket == active_bucket else "none",
             )
         )
 
+    # Direct labels at the right end of each line: the higher end above its line, the lower below.
+    ends = []
+    for series in buckets:
+        last = max(h for h, v in enumerate(series.hours) if v is not None)
+        ends.append((axes.scale_y(series.hours[last]), last, series))
+    labelled = []
+    for y, last, series in ends:
+        higher = all(y <= other_y for other_y, _l, _s in ends)
+        label_y = y - 8 if higher else y + CHART_FONT_SIZE + 2
+        label_y = max(axes.top + CHART_FONT_SIZE * 0.8, min(label_y, axes.bottom - 4))
+        labelled.append(replace(series, label_x=axes.right, label_y=label_y))
+    buckets = [next(s for s in labelled if s.bucket == b.bucket) for b in buckets]
+
+    # 8:00 markers from the plotted values only; the label sits at the lowest one.
+    at_8 = [
+        (series.hours[WEATHER_HEADLINE_HOUR], series)
+        for series in buckets
+        if series.hours[WEATHER_HEADLINE_HOUR] is not None
+    ]
+    headline_points = [
+        _make_headline(axes, value, WEATHER_HEADLINE_HOUR, chars=WEATHER_HEADLINE_CHARS) for value, _s in at_8
+    ]
+    headline = min(headline_points, key=lambda p: p.value) if headline_points else None
+
     return WeatherKindChart(
         kind=kind,
-        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        view_box=axes.view_box,
         excluded_n_hours=excluded_n_hours,
         buckets=buckets,
         missing_buckets=missing_buckets,
+        axes=axes,
+        headline_points=headline_points,
+        headline=headline,
     )
 
 
@@ -802,12 +851,18 @@ def weather_effect_chart(data_dir: str | Path) -> WeatherEffectChart:
 
     temperature_result = weather_effect(con, "temperature")
 
+    # One y scale for both small multiples so they can be compared.
+    rain_values, rain_excluded = _weather_values(rain_result.rows)
+    temp_values, temp_excluded = _weather_values(temperature_result.rows)
+    all_values = [0.0] + [v for by in (rain_values, temp_values) for vs in by.values() for v in vs.values()]
+    axes = build_axes(min(all_values), max(all_values))
+
     return WeatherEffectChart(
         status="ok",
         full_days=rain_result.full_days,
         message=None,
-        rain=_weather_kind_chart("rain", rain_result.rows),
-        temperature=_weather_kind_chart("temperature", temperature_result.rows),
+        rain=_weather_kind_chart("rain", rain_values, rain_excluded, axes),
+        temperature=_weather_kind_chart("temperature", temp_values, temp_excluded, axes),
     )
 
 
