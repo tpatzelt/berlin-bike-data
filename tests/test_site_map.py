@@ -136,6 +136,7 @@ def test_map_i18n_json_is_per_language_and_complete(map_site):
 
 def test_map_js_has_no_inline_bilingual_strings():
     js = (Path(__file__).parent.parent / "src/berlinbikes/site/static/map.js").read_text()
+    js = "\n".join(line for line in js.splitlines() if not line.lstrip().startswith("//"))
     for fragment in ("Tage", " days", "Could not", "Daten konnten", "Ortsteil ", "data.message"):
         assert fragment not in js
     assert "map-i18n" in js
