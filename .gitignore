@@ -11,3 +11,5 @@ __MACOSX/
 site-out/
 .bikes.env
 bikes-data/
+__pycache__/
+*.pyc
