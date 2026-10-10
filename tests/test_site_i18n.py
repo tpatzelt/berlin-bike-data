@@ -112,3 +112,52 @@ def test_t_formats_placeholders_and_escapes():
         assert str(t("_test", "en", x="<")) == "b &lt;"
     finally:
         del STRINGS["_test"]
+
+
+class _ArticleLangs(HTMLParser):
+    """Collect ``lang`` attributes of elements inside each ``<article id=...>``."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.html_lang = None
+        self.article_ids: list[str] = []
+        self.langs: dict[str, list[str]] = {}
+        self._current = None
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "html":
+            self.html_lang = a.get("lang")
+        elif tag == "article":
+            self._current = a.get("id")
+            self.article_ids.append(self._current)
+            self.langs[self._current] = []
+        elif self._current and a.get("lang"):
+            self.langs[self._current].append(a["lang"])
+
+    def handle_endtag(self, tag):
+        if tag == "article":
+            self._current = None
+
+
+@pytest.fixture(scope="module")
+def synthetic_site_dir(tmp_path_factory, synthetic_data_dir):
+    out = tmp_path_factory.mktemp("synthetic_site")
+    build_site(synthetic_data_dir, out)
+    return out
+
+
+@pytest.mark.parametrize("which", ("empty", "synthetic"))
+@pytest.mark.parametrize("name", ("index.html", "index.en.html"))
+def test_first_three_articles_are_single_language(which, name, site, synthetic_site_dir):
+    root = site[0] if which == "empty" else synthetic_site_dir
+    p = _ArticleLangs()
+    p.feed((root / name).read_text())
+    assert p.article_ids == ["availability", "shortage", "bezirke", "flow", "weather", "footprint"]
+    for article in ("availability", "shortage", "bezirke"):
+        assert [lang for lang in p.langs[article] if lang != p.html_lang] == []
+    if which == "synthetic":
+        text = (root / name).read_text()
+        marker = "Verfügbarkeit in Berlin" if name == "index.html" else "Availability in Berlin"
+        other = "Availability in Berlin" if name == "index.html" else "Verfügbarkeit in Berlin"
+        assert marker in text and other not in text

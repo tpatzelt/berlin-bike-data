@@ -110,14 +110,18 @@ def test_footer_links_resolve_to_generated_files(empty_site, page, lang):
 
 def test_empty_data_dir_shows_not_enough_data_state(empty_site):
     text = (empty_site / "index.html").read_text().lower()
-    assert "not enough data yet" in text
     assert "noch nicht genug daten" in text
+    assert "not enough data yet" not in text
+    en_text = (empty_site / "index.en.html").read_text().lower()
+    assert "not enough data yet" in en_text
+    assert "noch nicht genug daten" not in en_text
 
 
 def test_synthetic_data_dir_does_not_show_not_enough_data_state(synthetic_site):
-    text = (synthetic_site / "index.html").read_text().lower()
-    assert "not enough data yet" not in text
-    assert "noch nicht genug daten" not in text
+    for name in ("index.html", "index.en.html"):
+        text = (synthetic_site / name).read_text().lower()
+        assert "not enough data yet" not in text
+        assert "noch nicht genug daten" not in text
 
 
 def test_css_defines_theme_tokens_in_light_and_dark(empty_site):

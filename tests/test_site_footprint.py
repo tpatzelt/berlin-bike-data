@@ -125,8 +125,11 @@ def test_empty_data_dir_shows_not_enough_data_and_no_footprint_chart(tmp_path):
 
     html = (site_dir / "index.html").read_text()
     lowered = html.lower()
-    assert "not enough data yet" in lowered
     assert "noch nicht genug daten" in lowered
+    assert "not enough data yet" not in lowered
+    en_lowered = (site_dir / "index.en.html").read_text().lower()
+    assert "not enough data yet" in en_lowered
+    assert "noch nicht genug daten" not in en_lowered
     assert "0/14" in html or "0 / 14" in html
 
     root = _parse(html)
