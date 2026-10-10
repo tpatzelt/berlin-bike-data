@@ -158,6 +158,14 @@ def build_axes(y_lo: float, y_hi: float, x_tick_hours: tuple[int, ...] = (0, 4, 
     return Axes(**{**axes.__dict__, "y_ticks": y_ticks})
 
 
+def _headline_label_y(axes: Axes, point_y: float) -> float:
+    """Label below the marker, or above it when that would reach the x tick row."""
+    below = point_y + 22
+    if below > axes.bottom - CHART_FONT_SIZE:
+        below = point_y - 12
+    return max(axes.top + CHART_FONT_SIZE, min(below, axes.bottom - 4))
+
+
 @dataclass(frozen=True)
 class Headline:
     """The marked point: pixel position, plotted value and local hour."""
@@ -167,6 +175,7 @@ class Headline:
     value: float
     hour: int
     anchor: str
+    label_y: float
 
 
 @dataclass(frozen=True)
@@ -250,6 +259,7 @@ def availability_chart(data_dir: str | Path) -> AvailabilityChart:
         value=dip_value,
         hour=dip_hour,
         anchor="start" if dip_hour < 14 else "end",
+        label_y=_headline_label_y(axes, axes.scale_y(dip_value)),
     )
 
     return AvailabilityChart(

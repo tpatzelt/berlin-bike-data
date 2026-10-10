@@ -26,7 +26,7 @@
 {% macro headline(point, label) %}
 <g class="headline">
 <circle cx="{{ "%.1f"|format(point.x) }}" cy="{{ "%.1f"|format(point.y) }}" r="5"></circle>
-<text x="{{ "%.1f"|format(point.x + (10 if point.anchor == "start" else -10)) }}" y="{{ "%.1f"|format(point.y + 22) }}" text-anchor="{{ point.anchor }}">{{ label }}</text>
+<text x="{{ "%.1f"|format(point.x + (10 if point.anchor == "start" else -10)) }}" y="{{ "%.1f"|format(point.label_y) }}" text-anchor="{{ point.anchor }}">{{ label }}</text>
 </g>
 {% endmacro %}
 

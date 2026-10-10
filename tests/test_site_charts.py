@@ -98,3 +98,9 @@ def test_all_ticks_and_labels_fit_inside_viewbox(site):
     assert axes.y_min <= min(min(w.hours) for w in chart.weekdays)
     assert axes.y_max >= max(max(w.hours) for w in chart.weekdays)
     assert axes.x_title_y <= height and axes.y_title_x - CHART_FONT_SIZE / 2 >= 0
+
+
+def test_headline_label_sits_inside_plot_box(site):
+    data_dir, _ = site
+    chart = charts.availability_chart(data_dir)
+    assert chart.axes.top < chart.headline.label_y < chart.axes.bottom
