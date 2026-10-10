@@ -185,3 +185,99 @@ def test_strings_has_no_duplicate_keys():
             assert len(keys) == len(set(keys))
             return
     raise AssertionError("STRINGS literal not found")
+
+
+class _VisibleText(HTMLParser):
+    """Visible body text with script/style/head and the language switch removed."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.chunks: list[str] = []
+        self.foreign_langs: list[str] = []
+        self.html_lang = None
+        self._skip = 0
+        self._skip_stack: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "html":
+            self.html_lang = a.get("lang")
+        is_switch = tag == "a" and "lang-switch" in (a.get("class") or "")
+        if tag in ("script", "style", "head", "title") or is_switch:
+            self._skip += 1
+            self._skip_stack.append(tag)
+        elif a.get("lang") and a["lang"] != self.html_lang:
+            self.foreign_langs.append(a["lang"])
+
+    def handle_endtag(self, tag):
+        if self._skip_stack and self._skip_stack[-1] == tag:
+            self._skip_stack.pop()
+            self._skip -= 1
+
+    def handle_data(self, data):
+        if not self._skip:
+            self.chunks.append(data)
+
+
+def _norm(text: str) -> str:
+    import html
+    import re
+
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", text)).split())
+
+
+def _differing_values() -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {"de": [], "en": []}
+    for key, entry in STRINGS.items():
+        if entry["de"] == entry["en"]:
+            continue
+        for lang in ("de", "en"):
+            value = _norm(entry[lang])
+            if "{" not in value and len(value.split()) >= 2:
+                out[lang].append(value)
+    return out
+
+
+@pytest.fixture(scope="module")
+def sweep_sites(tmp_path_factory, synthetic_data_dir):
+    empty_data = tmp_path_factory.mktemp("empty_data")
+    roots = {}
+    for which, data in (("empty", empty_data), ("synthetic", synthetic_data_dir)):
+        out = tmp_path_factory.mktemp(f"sweep_{which}")
+        build_site(data, out)
+        roots[which] = out
+    return roots
+
+
+@pytest.mark.parametrize("which", ("empty", "synthetic"))
+@pytest.mark.parametrize("lang", ("de", "en"))
+@pytest.mark.parametrize("page", PAGES)
+def test_sweep_no_other_language_body_copy(sweep_sites, which, lang, page):
+    root = sweep_sites[which]
+    name = page if lang == "de" else _en(page)
+    raw = (root / name).read_text()
+    p = _VisibleText()
+    p.feed(raw)
+    assert p.html_lang == lang
+    # check 1: no foreign lang attribute outside the header switch
+    assert p.foreign_langs == []
+    # check 2: no differing multi-word catalog value of the other language
+    text = _norm(" ".join(p.chunks))
+    other = "en" if lang == "de" else "de"
+    mine = set(_differing_values()[lang])
+    leaked = [v for v in _differing_values()[other] if v not in mine and v in text]
+    assert leaked == []
+    # check 3: counterpart link and alternates
+    parsed = _parse(root / name)
+    counterpart = _en(page) if lang == "de" else page
+    assert [s["href"] for s in parsed.switches] == [counterpart]
+    assert set(parsed.alternates) == {"de", "en", "x-default"}
+    for href in parsed.alternates.values():
+        assert (root / href).exists()
+
+
+def test_sweep_detects_a_leaked_english_value():
+    values = _differing_values()
+    assert len(values["en"]) > 20 and len(values["de"]) > 20
+    leaked = "Hallo " + values["en"][0]
+    assert values["en"][0] in _norm(leaked)
