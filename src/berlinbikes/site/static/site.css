@@ -68,6 +68,8 @@ svg.chart .headline circle { fill: var(--fg); stroke: var(--bg); stroke-width: 2
 
 svg.chart .headline text { fill: var(--fg); paint-order: stroke; stroke: var(--bg); stroke-width: 4; }
 
+svg.chart .zero-line { stroke: var(--fg); stroke-width: 1.5; }
+
 .chart-legend .swatch-line { display: block; }
 
 svg.bars text { font-size: 10px; fill: var(--fg); }

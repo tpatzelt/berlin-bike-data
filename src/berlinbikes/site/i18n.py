@@ -82,6 +82,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "Verfügbare Räder je Bezirk, Mo-Fr, je Uhrzeit (0–23 Uhr, Europe/Berlin), auf Basis von {full_days} vollen Tagen.",
         "en": "Bikes available by Bezirk, Mon-Fri, by local hour (0–23, Europe/Berlin), based on {full_days} full days.",
     },
+    "bezirke.axis.x": {"de": "Uhrzeit (Uhr, Europe/Berlin)", "en": "Local hour (h, Europe/Berlin)"},
+    "bezirke.axis.y": {"de": "Verfügbare Räder (Anzahl, Mo–Fr)", "en": "Bikes available (count, Mon–Fri)"},
+    "bezirke.headline": {
+        "de": "{value} Räder um {hour}:00",
+        "en": "{value} bikes at {hour}:00",
+    },
     "bezirke.table.caption": {
         "de": "Verfügbare Räder je Bezirk und Uhrzeit (Mo-Fr)",
         "en": "Bikes available by Bezirk and local hour (Mo-Fr)",
@@ -98,6 +104,15 @@ STRINGS: dict[str, dict[str, str]] = {
     "flow.caption": {
         "de": "Räder gewonnen (+) / verloren (-) je Bezirk und Uhrzeit (0–23 Uhr, Europe/Berlin), Mo-Fr im Mittel pro Tag, auf Basis von {full_days} vollen Tagen.",
         "en": "Bikes gained (+) / lost (-) per Bezirk by local hour (0–23, Europe/Berlin), Mon-Fri mean per day, based on {full_days} full days.",
+    },
+    "flow.axis.x": {"de": "Uhrzeit (Uhr, Europe/Berlin)", "en": "Local hour (h, Europe/Berlin)"},
+    "flow.axis.y": {
+        "de": "Räder pro Stunde (netto, Mo–Fr)",
+        "en": "Bikes per hour (net, Mon–Fri)",
+    },
+    "flow.headline": {
+        "de": "{value} Räder/Std. um {hour}:00",
+        "en": "{value} bikes/h at {hour}:00",
     },
     "flow.table.caption": {
         "de": "Netto gewonnene/verlorene Räder je Bezirk und Uhrzeit (Mo-Fr)",

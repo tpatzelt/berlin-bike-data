@@ -13,6 +13,14 @@ positive in the evening" scripted shape from ``tests/synthetic.py``.
 
 from __future__ import annotations
 
+import re
+
+import pytest
+
+from berlinbikes.site import charts
+from berlinbikes.site.charts import CHART_FONT_SIZE, cycle_dasharray
+from tests.helpers.svg import assert_axes_conventions, chart_elements, polyline_dasharrays, root_font_size
+
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.flow import net_flow_by_bezirk
 from berlinbikes.site import build_site
@@ -141,3 +149,65 @@ def test_empty_data_dir_shows_not_enough_data_and_no_flow_chart(tmp_path):
     assert "0/14" in _text(not_enough[0]) or "0 / 14" in _text(not_enough[0])
 
     assert not _find_all(article, "svg"), "no flow chart should render below the 14-full-day minimum"
+
+
+def _figure_html(html: str, article_id: str) -> str:
+    start = html.index(f'<article id="{article_id}">')
+    figure = html[html.index("<figure>", start) :]
+    return figure[: figure.index("</figure>")]
+
+
+def _label_fits(headline, text, axes) -> bool:
+    """Both label lines (name, then value) stay inside the plot box."""
+    width = max(len(line) for line in text.split()[:1] + [" ".join(text.split()[1:])]) * 0.55 * CHART_FONT_SIZE
+    x = headline.label_x
+    lo, hi = {"start": (x, x + width), "end": (x - width, x), "middle": (x - width / 2, x + width / 2)}[headline.anchor]
+    return axes.left <= lo and hi <= axes.right + 1
+
+
+
+@pytest.mark.parametrize("name,lang", [("index.html", "de"), ("index.en.html", "en")])
+def test_flow_chart_has_labelled_zero_line_axes_and_loss_headline(synthetic_data_dir, tmp_path, name, lang):
+    site_dir = tmp_path / "site"
+    build_site(synthetic_data_dir, site_dir)
+    html = (site_dir / name).read_text()
+    els = assert_axes_conventions(_figure_html(html, "flow"))
+    assert polyline_dasharrays(els) == ["none"] * len(BEZIRKE)  # one color cycle: colors alone differ
+
+    titles = [e["text"] for e in els if "axis-title-y" in e["classes"]]
+    assert titles == ["Räder pro Stunde (netto, Mo–Fr)" if lang == "de" else "Bikes per hour (net, Mon–Fri)"]
+
+    chart = charts.flow_chart(synthetic_data_dir)
+    zero_tick = [e for e in els if "tick" in e["classes"] and "axis-y" in e["groups"] and e["text"] == "0"]
+    assert len(zero_tick) == 1
+    zero_line = [e for e in els if "zero-line" in e["classes"]]
+    assert len(zero_line) == 1
+    assert float(zero_line[0]["attrs"]["y1"]) == pytest.approx(chart.zero_y, abs=0.05)
+    assert chart.axes.y_min < 0 < chart.axes.y_max
+
+    # Headline: the largest net loss between 6:00 and 10:00 among the plotted values.
+    expected = _expected_weekday_net_by_hour(connect(synthetic_data_dir))
+    loss, hour, bezirk = min(
+        (expected.get((b, h), 0.0), h, b) for b in BEZIRKE for h in range(6, 11)
+    )
+    assert loss < 0
+    label = [e for e in els if e["tag"] == "text" and "headline" in e["groups"]][0]
+    word = "Räder/Std. um" if lang == "de" else "bikes/h at"
+    assert " ".join(label["text"].split()) == f"{bezirk} {loss:.1f} {word} {hour}:00"
+    assert _label_fits(chart.headline, label["text"], chart.axes)
+
+    figure = _figure_html(html, "flow")
+    legend = figure[figure.index('class="chart-legend"') :]
+    assert legend.count("swatch-line") == len(BEZIRKE)
+
+
+def test_flow_chart_ok_result_without_weekday_rows_has_no_headline(tmp_path, monkeypatch):
+    from berlinbikes.analysis import MetricResult
+
+    empty = MetricResult(name="net_flow_by_bezirk", full_days=20, status="ok", message=None, rows=[])
+    monkeypatch.setattr(charts, "net_flow_by_bezirk", lambda con: empty)
+    monkeypatch.setattr(charts, "connect", lambda data_dir: None)
+    chart = charts.flow_chart(tmp_path)
+    assert chart.status == "ok"
+    assert chart.bezirke == []
+    assert chart.headline is None

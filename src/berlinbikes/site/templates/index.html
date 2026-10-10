@@ -101,19 +101,23 @@
 <p>{{ t("bezirke.intro") }}</p>
 {% if bezirk_availability_chart.status == "ok" %}
 <figure>
-<svg viewBox="{{ bezirk_availability_chart.view_box }}" role="img" class="chart"
+<svg viewBox="{{ bezirk_availability_chart.view_box }}" role="img" class="chart" font-size="{{ bezirk_availability_chart.axes.font_size }}"
      aria-label="{{ t("bezirke.aria") }}">
+{{ chart.axes_frame(bezirk_availability_chart.axes, t("bezirke.axis.x"), t("bezirke.axis.y")) }}
 {% for bez in bezirk_availability_chart.bezirke %}
-<polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2"></polyline>
+<polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2" stroke-dasharray="{{ bez.dasharray }}"></polyline>
 {% endfor %}
+{% if bezirk_availability_chart.headline %}
+{{ chart.headline(bezirk_availability_chart.headline, t("bezirke.headline", name=bezirk_availability_chart.headline.name, value="%.0f"|format(bezirk_availability_chart.headline.value), hour=bezirk_availability_chart.headline.hour)) }}
+{% endif %}
 </svg>
+{% set legend_items = [] %}
+{% for bez in bezirk_availability_chart.bezirke %}
+{% set _ = legend_items.append({"color": "var(--series-" ~ bez.color_index ~ ")", "dasharray": bez.dasharray, "label": bez.name}) %}
+{% endfor %}
+{{ chart.dash_legend(legend_items) }}
 <figcaption>{{ t("bezirke.caption", full_days=bezirk_availability_chart.full_days) }}</figcaption>
 </figure>
-<ul class="chart-legend">
-{% for bez in bezirk_availability_chart.bezirke %}
-<li><span class="swatch" style="background: var(--series-{{ bez.color_index }})"></span><span>{{ bez.name }}</span></li>
-{% endfor %}
-</ul>
 <details>
 <summary>{{ t("common.show_table") }}</summary>
 <table>
@@ -149,20 +153,24 @@
 <p>{{ t("flow.intro") }}</p>
 {% if flow_chart.status == "ok" %}
 <figure>
-<svg viewBox="{{ flow_chart.view_box }}" role="img" class="chart"
+<svg viewBox="{{ flow_chart.view_box }}" role="img" class="chart" font-size="{{ flow_chart.axes.font_size }}"
      aria-label="{{ t("flow.aria") }}">
-<line x1="{{ flow_chart.x_start }}" x2="{{ flow_chart.x_end }}" y1="{{ flow_chart.zero_y }}" y2="{{ flow_chart.zero_y }}" stroke="var(--muted)" stroke-dasharray="4 2"></line>
+{{ chart.axes_frame(flow_chart.axes, t("flow.axis.x"), t("flow.axis.y")) }}
+<line class="zero-line" x1="{{ flow_chart.x_start }}" x2="{{ flow_chart.x_end }}" y1="{{ "%.1f"|format(flow_chart.zero_y) }}" y2="{{ "%.1f"|format(flow_chart.zero_y) }}"></line>
 {% for bez in flow_chart.bezirke %}
-<polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2"></polyline>
+<polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2" stroke-dasharray="{{ bez.dasharray }}"></polyline>
 {% endfor %}
+{% if flow_chart.headline %}
+{{ chart.headline(flow_chart.headline, t("flow.headline", name=flow_chart.headline.name, value="%.1f"|format(flow_chart.headline.value), hour=flow_chart.headline.hour)) }}
+{% endif %}
 </svg>
+{% set legend_items = [] %}
+{% for bez in flow_chart.bezirke %}
+{% set _ = legend_items.append({"color": "var(--series-" ~ bez.color_index ~ ")", "dasharray": bez.dasharray, "label": bez.name}) %}
+{% endfor %}
+{{ chart.dash_legend(legend_items) }}
 <figcaption>{{ t("flow.caption", full_days=flow_chart.full_days) }}</figcaption>
 </figure>
-<ul class="chart-legend">
-{% for bez in flow_chart.bezirke %}
-<li><span class="swatch" style="background: var(--series-{{ bez.color_index }})"></span><span>{{ bez.name }}</span></li>
-{% endfor %}
-</ul>
 <details>
 <summary>{{ t("common.show_table") }}</summary>
 <table>

@@ -77,6 +77,12 @@ CHART_FONT_SIZE = 16.5
 #: One stroke-dasharray per weekday (Monday solid), so the lines differ by more than color.
 WEEKDAY_DASHARRAYS = ("none", "7 4", "2 3", "9 3 2 3", "12 5", "3 2 1 2", "1 4")
 
+#: Rough glyph width as a fraction of the font size, for fitting headline labels.
+HEADLINE_CHAR_WIDTH = 0.55
+
+#: Line spacing of two-line headline labels, in em.
+HEADLINE_LINE_HEIGHT = 1.1
+
 #: Local hours between which the headline looks for the Mon-Fri dip.
 HEADLINE_HOURS = (6, 10)
 
@@ -158,12 +164,13 @@ def build_axes(y_lo: float, y_hi: float, x_tick_hours: tuple[int, ...] = (0, 4, 
     return Axes(**{**axes.__dict__, "y_ticks": y_ticks})
 
 
-def _headline_label_y(axes: Axes, point_y: float) -> float:
-    """Label below the marker, or above it when that would reach the x tick row."""
+def _headline_label_y(axes: Axes, point_y: float, lines: int = 1) -> float:
+    """First-line baseline: below the marker, or above it when that would reach the x tick row."""
+    extra = (lines - 1) * CHART_FONT_SIZE * HEADLINE_LINE_HEIGHT
     below = point_y + 22
-    if below > axes.bottom - CHART_FONT_SIZE:
-        below = point_y - 12
-    return max(axes.top + CHART_FONT_SIZE, min(below, axes.bottom - 4))
+    if below + extra > axes.bottom - CHART_FONT_SIZE:
+        below = point_y - 12 - extra
+    return max(axes.top + CHART_FONT_SIZE, min(below, axes.bottom - 4 - extra))
 
 
 @dataclass(frozen=True)
@@ -175,7 +182,42 @@ class Headline:
     value: float
     hour: int
     anchor: str
+    label_x: float
     label_y: float
+    name: str = ""
+
+
+def _make_headline(axes: Axes, value: float, hour: int, name: str = "", chars: int = 0) -> Headline:
+    """Marker plus label placement; ``chars`` is the longest label line, to keep it in the plot box.
+
+    With ``chars=0`` the label goes right of the marker before 14:00, left after.
+    """
+    point_y = axes.scale_y(value)
+    x = axes.left + hour / 23 * (axes.right - axes.left)
+    width = chars * HEADLINE_CHAR_WIDTH * CHART_FONT_SIZE
+    if chars == 0:
+        anchor = "start" if hour < 14 else "end"
+    elif x + 10 + width <= axes.right:
+        anchor = "start"
+    elif x - 10 - width >= axes.left:
+        anchor = "end"
+    else:
+        anchor = "middle"
+    label_x = {
+        "start": x + 10,
+        "end": x - 10,
+        "middle": min(max(x, axes.left + width / 2), axes.right - width / 2),
+    }[anchor]
+    return Headline(
+        x=x,
+        y=point_y,
+        value=value,
+        hour=hour,
+        anchor=anchor,
+        label_x=label_x,
+        label_y=_headline_label_y(axes, point_y, 2 if name else 1),
+        name=name,
+    )
 
 
 @dataclass(frozen=True)
@@ -253,14 +295,7 @@ def availability_chart(data_dir: str | Path) -> AvailabilityChart:
     dip_value, dip_hour = min(
         (weekdays[d].hours[h], h) for d in range(5) for h in range(lo_hour, hi_hour + 1)
     )
-    headline = Headline(
-        x=x_of(dip_hour),
-        y=axes.scale_y(dip_value),
-        value=dip_value,
-        hour=dip_hour,
-        anchor="start" if dip_hour < 14 else "end",
-        label_y=_headline_label_y(axes, axes.scale_y(dip_value)),
-    )
+    headline = _make_headline(axes, dip_value, dip_hour)
 
     return AvailabilityChart(
         status="ok",
@@ -280,6 +315,7 @@ class BezirkSeries:
     name: str
     points: str
     hours: list[float | None]
+    dasharray: str = "none"
 
 
 @dataclass(frozen=True)
@@ -289,6 +325,17 @@ class BezirkAvailabilityChart:
     message: str | None
     view_box: str
     bezirke: list[BezirkSeries] | None
+    axes: Axes | None = None
+    headline: Headline | None = None
+
+
+#: Hour of the Bezirk availability headline.
+BEZIRK_HEADLINE_HOUR = 8
+
+
+def cycle_dasharray(index: int) -> str:
+    """Colors repeat every 7 series; each repetition gets its own dash pattern."""
+    return WEEKDAY_DASHARRAYS[(index // 7) % len(WEEKDAY_DASHARRAYS)]
 
 
 def bezirk_availability_chart(data_dir: str | Path) -> BezirkAvailabilityChart:
@@ -320,9 +367,8 @@ def bezirk_availability_chart(data_dir: str | Path) -> BezirkAvailabilityChart:
 
     hour_means = {key: sum(values) / len(values) for key, values in weekday_values.items()}
 
-    all_values = list(hour_means.values())
-    y_min, y_max = (min(all_values), max(all_values)) if all_values else (0.0, 1.0)
-    y_span = (y_max - y_min) or 1.0
+    all_values = list(hour_means.values()) or [0.0, 1.0]
+    axes = build_axes(min(all_values), max(all_values))
 
     bezirke = []
     for index, name in enumerate(sorted(bezirk_names)):
@@ -332,7 +378,8 @@ def bezirk_availability_chart(data_dir: str | Path) -> BezirkAvailabilityChart:
             value = hour_means.get((name, hour))
             hours.append(value)
             if value is not None:
-                points_parts.append(f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}")
+                x = axes.left + hour / 23 * (axes.right - axes.left)
+                points_parts.append(f"{x:.1f},{axes.scale_y(value):.1f}")
         bezirke.append(
             BezirkSeries(
                 index=index,
@@ -340,15 +387,25 @@ def bezirk_availability_chart(data_dir: str | Path) -> BezirkAvailabilityChart:
                 name=name,
                 points=" ".join(points_parts),
                 hours=hours,
+                dasharray=cycle_dasharray(index),
             )
         )
+
+    # The Bezirk with the lowest plotted value at 8:00.
+    at_8 = [(s_.hours[BEZIRK_HEADLINE_HOUR], s_.name) for s_ in bezirke if s_.hours[BEZIRK_HEADLINE_HOUR] is not None]
+    headline = None
+    if at_8:
+        value, name = min(at_8)
+        headline = _make_headline(axes, value, BEZIRK_HEADLINE_HOUR, name, max(len(name), 20))
 
     return BezirkAvailabilityChart(
         status="ok",
         full_days=result.full_days,
         message=None,
-        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
+        view_box=axes.view_box,
         bezirke=bezirke,
+        axes=axes,
+        headline=headline,
     )
 
 
@@ -359,6 +416,7 @@ class FlowSeries:
     name: str
     points: str
     hours: list[float]
+    dasharray: str = "none"
 
 
 @dataclass(frozen=True)
@@ -371,6 +429,8 @@ class FlowChart:
     x_start: float
     x_end: float
     bezirke: list[FlowSeries] | None
+    axes: Axes | None = None
+    headline: Headline | None = None
 
 
 def flow_chart(data_dir: str | Path) -> FlowChart:
@@ -406,28 +466,48 @@ def flow_chart(data_dir: str | Path) -> FlowChart:
         net_by_key[(bezirk, hour)] = net
 
     all_values = list(net_by_key.values()) + [0.0]
-    y_min, y_max = min(all_values), max(all_values)
-    y_span = (y_max - y_min) or 1.0
+    axes = build_axes(min(all_values), max(all_values))
 
     bezirke = []
     for index, name in enumerate(sorted(bezirk_names)):
         hours = [net_by_key.get((name, hour), 0.0) for hour in range(24)]
         points = " ".join(
-            f"{_scale_x(hour):.1f},{_scale_y(value, y_min, y_span):.1f}" for hour, value in enumerate(hours)
+            f"{axes.left + hour / 23 * (axes.right - axes.left):.1f},{axes.scale_y(value):.1f}"
+            for hour, value in enumerate(hours)
         )
         bezirke.append(
-            FlowSeries(index=index, color_index=(index % 7) + 1, name=name, points=points, hours=hours)
+            FlowSeries(
+                index=index,
+                color_index=(index % 7) + 1,
+                name=name,
+                points=points,
+                hours=hours,
+                dasharray=cycle_dasharray(index),
+            )
         )
+
+    # The largest net loss between 6:00 and 10:00; no headline if nothing is lost.
+    lo_hour, hi_hour = HEADLINE_HOURS
+    candidates = [
+        (series.hours[h], h, series.name) for series in bezirke for h in range(lo_hour, hi_hour + 1)
+    ]
+    headline = None
+    if candidates:
+        loss, hour, name = min(candidates)
+        if loss < 0:
+            headline = _make_headline(axes, loss, hour, name, max(len(name), 24))
 
     return FlowChart(
         status="ok",
         full_days=result.full_days,
         message=None,
-        view_box=f"0 0 {VIEW_WIDTH} {VIEW_HEIGHT}",
-        zero_y=_scale_y(0.0, y_min, y_span),
-        x_start=_scale_x(0),
-        x_end=_scale_x(23),
+        view_box=axes.view_box,
+        zero_y=axes.scale_y(0.0),
+        x_start=axes.left,
+        x_end=axes.right,
         bezirke=bezirke,
+        axes=axes,
+        headline=headline,
     )
 
 
