@@ -21,6 +21,7 @@ from berlinbikes.site.charts import (
     shortage_chart,
     weather_effect_chart,
 )
+from berlinbikes.site.i18n import LANGS, t
 from berlinbikes.site.profiles import write_profiles_json
 from berlinbikes.site.sources import DATA_SOURCES
 
@@ -28,6 +29,15 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
 
 PAGES = ("index.html", "map.html", "methodology.html", "impressum.html", "datenschutz.html")
+
+
+def page_url(page: str, lang: str) -> str:
+    """File name of ``page`` (a German ``PAGES`` entry) in ``lang``."""
+    if lang == "de":
+        return page
+    if lang == "en":
+        return page.removesuffix(".html") + ".en.html"
+    raise KeyError(f"unknown language: {lang!r}")
 
 
 DEFAULT_OPERATOR = {"name": "[NAME]", "address": "[ANSCHRIFT]", "email": "[E-MAIL]"}
@@ -63,9 +73,20 @@ def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, s
 
     written = []
     for page in PAGES:
-        out_path = site_dir / page
-        out_path.write_text(env.get_template(page).render(**context))
-        written.append(out_path)
+        for lang in LANGS:
+            out_path = site_dir / page_url(page, lang)
+            page_context = {
+                **context,
+                "lang": lang,
+                "page": page,
+                "t": lambda key, _lang=lang, **kw: t(key, _lang, **kw),
+                "url": lambda target, _lang=lang: page_url(target, _lang),
+                "page_urls": {other: page_url(page, other) for other in LANGS},
+                "counterpart_lang": "en" if lang == "de" else "de",
+                "counterpart_url": page_url(page, "en" if lang == "de" else "de"),
+            }
+            out_path.write_text(env.get_template(page).render(**page_context))
+            written.append(out_path)
 
     for asset in ("site.css", "map.js"):
         asset_dst = site_dir / asset

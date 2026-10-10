@@ -1,27 +1,31 @@
 <!doctype html>
-<html lang="de">
+<html lang="{{ lang }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Wie Berlin radelt{% endblock %}</title>
+<title>{% block title %}{{ t("site.title") }}{% endblock %}</title>
 <link rel="stylesheet" href="site.css">
+<link rel="alternate" hreflang="de" href="{{ page_urls.de }}">
+<link rel="alternate" hreflang="en" href="{{ page_urls.en }}">
+<link rel="alternate" hreflang="x-default" href="{{ page_urls.de }}">
 {% block head %}{% endblock %}
 </head>
 <body>
-<header>
-<h1>Wie Berlin radelt <span lang="en">(How Berlin Rides)</span></h1>
+<header class="site-header">
+<a class="site-title" href="{{ url('index.html') }}">{{ t("site.title") }}</a>
+<nav aria-label="{{ t('nav.label') }}">
+<a href="{{ url('index.html') }}">{{ t("nav.home") }}</a>
+<a href="{{ url('map.html') }}">{{ t("nav.map") }}</a>
+<a href="{{ url('methodology.html') }}">{{ t("nav.methodology") }}</a>
+</nav>
+<a class="lang-switch" href="{{ counterpart_url }}" hreflang="{{ counterpart_lang }}" lang="{{ counterpart_lang }}">{{ t("lang.switch") }}</a>
 </header>
 <main>
 {% block content %}{% endblock %}
 </main>
 <footer>
-<nav>
-<a href="index.html">Start / Home</a>
-<a href="map.html">Karte / Map</a>
-<a href="methodology.html">Methodik / Methodology</a>
-<a href="impressum.html">Impressum</a>
-<a href="datenschutz.html">Datenschutz / Privacy</a>
-</nav>
+<a href="{{ url('impressum.html') }}">{{ t("nav.impressum") }}</a>
+<a href="{{ url('datenschutz.html') }}">{{ t("nav.privacy") }}</a>
 </footer>
 </body>
 </html>
