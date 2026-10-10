@@ -173,6 +173,9 @@ def test_empty_data_dir_shows_not_enough_data_message_and_no_chart(tmp_path):
     text = (site_dir / "index.html").read_text()
     assert not _find_all(_parse(text), "svg")
     lowered = text.lower()
-    assert "not enough data yet" in lowered
     assert "noch nicht genug daten" in lowered
+    assert "not enough data yet" not in lowered
+    en_lowered = (site_dir / "index.en.html").read_text().lower()
+    assert "not enough data yet" in en_lowered
+    assert "noch nicht genug daten" not in en_lowered
     assert "0/14" in text or "0 / 14" in text

@@ -84,8 +84,11 @@ def test_empty_data_dir_shows_not_enough_data_and_no_shortage_chart(tmp_path):
 
     html = (site_dir / "index.html").read_text()
     lowered = html.lower()
-    assert "not enough data yet" in lowered
     assert "noch nicht genug daten" in lowered
+    assert "not enough data yet" not in lowered
+    en_lowered = (site_dir / "index.en.html").read_text().lower()
+    assert "not enough data yet" in en_lowered
+    assert "noch nicht genug daten" not in en_lowered
     assert "0/14" in html or "0 / 14" in html
 
     root = _parse(html)
@@ -119,3 +122,13 @@ def test_build_site_survives_a_null_share_at_0800(monkeypatch, synthetic_data_di
     assert "an average of" not in html
     assert "S-X" in html, "the bar chart/table must still render"
     assert "17" in html, "'based on N full days' must still show"
+
+
+def test_shortage_aria_label_keeps_the_weekday_range_in_both_languages(synthetic_data_dir, tmp_path):
+    site_dir = tmp_path / "site"
+    build_site(synthetic_data_dir, site_dir)
+    for name, expected in (("index.html", "Mo-Fr 7:30-8:30"), ("index.en.html", "Mon-Fri 7:30-8:30")):
+        root = _parse((site_dir / name).read_text())
+        bar_svgs = [s for s in _find_all(root, "svg") if "bars" in (s.attrs.get("class") or "").split()]
+        assert len(bar_svgs) == 1
+        assert expected in bar_svgs[0].attrs["aria-label"]

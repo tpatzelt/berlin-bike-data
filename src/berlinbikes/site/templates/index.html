@@ -1,43 +1,31 @@
 {% extends "base.html" %}
 {% block title %}{{ t("title.index") }}{% endblock %}
 {% block content %}
-<article>
-<section lang="de">
-<h2>Verfügbarkeit in Berlin</h2>
-<p>Mittlere Anzahl verfügbarer Räder in Berlin, je Wochentag und Uhrzeit (Europe/Berlin).</p>
-</section>
-<section lang="en">
-<h2>Availability in Berlin</h2>
-<p>Mean number of bikes available citywide, by weekday and local hour (Europe/Berlin).</p>
-</section>
+<article id="availability">
+<h2>{{ t("availability.heading") }}</h2>
+<p>{{ t("availability.intro") }}</p>
 {% if availability_chart.status == "ok" %}
 <figure>
 <svg viewBox="{{ availability_chart.view_box }}" role="img" class="chart"
-     aria-label="Mittlere Anzahl verfügbarer Räder in Berlin je Wochentag und Uhrzeit (0-23 Uhr, Europe/Berlin) / Mean bikes available in Berlin by weekday and local hour (0-23, Europe/Berlin)">
+     aria-label="{{ t("availability.aria") }}">
 {% for wd in availability_chart.weekdays %}
 <polyline points="{{ wd.points }}" fill="none" stroke="var(--series-{{ wd.index + 1 }})" stroke-width="2"></polyline>
 {% endfor %}
 </svg>
-<figcaption>
-<span lang="de">Verfügbare Räder je Uhrzeit (0–23 Uhr, Europe/Berlin) und Wochentag (Mo–So), auf Basis von {{ availability_chart.full_days }} vollen Tagen.</span>
-<span lang="en">Bikes available by local hour (0–23, Europe/Berlin) and weekday (Mon–Sun), based on {{ availability_chart.full_days }} full days.</span>
-</figcaption>
+<figcaption>{{ t("availability.caption", full_days=availability_chart.full_days) }}</figcaption>
 </figure>
 <ul class="chart-legend">
 {% for wd in availability_chart.weekdays %}
-<li><span class="swatch" style="background: var(--series-{{ wd.index + 1 }})"></span><span lang="de">{{ wd.name_de }}</span><span lang="en">{{ wd.name_en }}</span></li>
+<li><span class="swatch" style="background: var(--series-{{ wd.index + 1 }})"></span><span>{{ t("weekday.short." ~ wd.index) }}</span></li>
 {% endfor %}
 </ul>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<summary>{{ t("common.show_table") }}</summary>
 <table>
-<caption>
-<span lang="de">Verfügbare Räder je Wochentag und Uhrzeit</span>
-<span lang="en">Bikes available by weekday and local hour</span>
-</caption>
+<caption>{{ t("availability.table.caption") }}</caption>
 <thead>
 <tr>
-<th scope="col"><span lang="de">Tag</span><span lang="en">Day</span></th>
+<th scope="col">{{ t("common.table.day") }}</th>
 {% for hour in range(24) %}
 <th scope="col">{{ hour }}</th>
 {% endfor %}
@@ -46,7 +34,7 @@
 <tbody>
 {% for wd in availability_chart.weekdays %}
 <tr>
-<th scope="row"><span lang="de">{{ wd.name_de }}</span><span lang="en">{{ wd.name_en }}</span></th>
+<th scope="row">{{ t("weekday.short." ~ wd.index) }}</th>
 {% for value in wd.hours %}
 <td>{{ "%.1f"|format(value) }}</td>
 {% endfor %}
@@ -57,49 +45,35 @@
 </details>
 {% else %}
 <p class="not-enough-data">
-{{ availability_chart.message }} ({{ availability_chart.full_days }}/{{ min_full_days }})
+{{ t("common.not_enough_data") }} ({{ availability_chart.full_days }}/{{ min_full_days }})
 </p>
 {% endif %}
 </article>
-<article>
-<section lang="de">
-<h2>Der Morgen-Engpass um 8 Uhr</h2>
+<article id="shortage">
+<h2>{{ t("shortage.heading") }}</h2>
 {% if shortage_chart.status == "ok" and shortage_chart.share_pct is not none %}
-<p>An Wochentagen waren um 8:00 Uhr durchschnittlich {{ "%.1f"|format(shortage_chart.share_pct) }}% der Stationen leer.</p>
+<p>{{ t("shortage.summary", share_pct="%.1f"|format(shortage_chart.share_pct)) }}</p>
 {% endif %}
-</section>
-<section lang="en">
-<h2>The 8am morning shortage</h2>
-{% if shortage_chart.status == "ok" and shortage_chart.share_pct is not none %}
-<p>On weekdays, an average of {{ "%.1f"|format(shortage_chart.share_pct) }}% of stations were empty at 8:00.</p>
-{% endif %}
-</section>
 {% if shortage_chart.status == "ok" %}
 <figure>
-<svg viewBox="{{ shortage_chart.view_box }}" role="img" class="chart bars" aria-label="{{ shortage_chart.aria_label }}">
+<svg viewBox="{{ shortage_chart.view_box }}" role="img" class="chart bars" aria-label="{{ t("shortage.aria", n=shortage_chart.bars|length) }}">
 {% for bar in shortage_chart.bars %}
 <rect x="{{ bar.bar_x }}" y="{{ bar.bar_y }}" width="{{ bar.bar_width }}" height="{{ bar.bar_height }}" fill="var(--accent)"></rect>
 <text x="{{ bar.bar_x - 4 }}" y="{{ bar.label_y }}" text-anchor="end">{{ bar.station_id }} ({{ bar.ortsteil }})</text>
 <text x="{{ bar.value_x }}" y="{{ bar.label_y }}">{{ "%.1f"|format(bar.minutes_per_day) }}</text>
 {% endfor %}
 </svg>
-<figcaption>
-<span lang="de">Stationen mit den meisten leeren Minuten pro Tag im Morgenfenster (Mo–Fr 7:30–8:30 Uhr), auf Basis von {{ shortage_chart.full_days }} vollen Tagen.</span>
-<span lang="en">Stations with the most empty minutes per day in the morning window (Mon–Fri 7:30–8:30), based on {{ shortage_chart.full_days }} full days.</span>
-</figcaption>
+<figcaption>{{ t("shortage.caption", full_days=shortage_chart.full_days) }}</figcaption>
 </figure>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<summary>{{ t("common.show_table") }}</summary>
 <table>
-<caption>
-<span lang="de">Leere Minuten pro Tag im Morgenfenster, nach Station</span>
-<span lang="en">Empty minutes per day in the morning window, by station</span>
-</caption>
+<caption>{{ t("shortage.table.caption") }}</caption>
 <thead>
 <tr>
-<th scope="col"><span lang="de">Station</span><span lang="en">Station</span></th>
+<th scope="col">{{ t("common.table.station") }}</th>
 <th scope="col">Ortsteil</th>
-<th scope="col"><span lang="de">Min./Tag</span><span lang="en">Min/day</span></th>
+<th scope="col">{{ t("common.table.min_per_day") }}</th>
 </tr>
 </thead>
 <tbody>
@@ -115,31 +89,22 @@
 </details>
 {% else %}
 <p class="not-enough-data">
-{{ shortage_chart.message }} ({{ shortage_chart.full_days }}/{{ min_full_days }})
+{{ t("common.not_enough_data") }} ({{ shortage_chart.full_days }}/{{ min_full_days }})
 </p>
 {% endif %}
 </article>
-<article>
-<section lang="de">
-<h2>Verfügbarkeit je Bezirk</h2>
-<p>Mittlere Anzahl verfügbarer Räder je Bezirk, Mo-Fr, nach Uhrzeit (Europe/Berlin).</p>
-</section>
-<section lang="en">
-<h2>Availability by Bezirk</h2>
-<p>Mean number of bikes available by Bezirk, Mon-Fri, by local hour (Europe/Berlin).</p>
-</section>
+<article id="bezirke">
+<h2>{{ t("bezirke.heading") }}</h2>
+<p>{{ t("bezirke.intro") }}</p>
 {% if bezirk_availability_chart.status == "ok" %}
 <figure>
 <svg viewBox="{{ bezirk_availability_chart.view_box }}" role="img" class="chart"
-     aria-label="Mittlere Anzahl verfügbarer Räder je Bezirk, Mo-Fr, nach Uhrzeit (0-23 Uhr, Europe/Berlin) / Mean bikes available by Bezirk, Mon-Fri, by local hour (0-23, Europe/Berlin)">
+     aria-label="{{ t("bezirke.aria") }}">
 {% for bez in bezirk_availability_chart.bezirke %}
 <polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2"></polyline>
 {% endfor %}
 </svg>
-<figcaption>
-<span lang="de">Verfügbare Räder je Bezirk, Mo-Fr, je Uhrzeit (0–23 Uhr, Europe/Berlin), auf Basis von {{ bezirk_availability_chart.full_days }} vollen Tagen.</span>
-<span lang="en">Bikes available by Bezirk, Mo-Fr, by local hour (0–23, Europe/Berlin), based on {{ bezirk_availability_chart.full_days }} full days.</span>
-</figcaption>
+<figcaption>{{ t("bezirke.caption", full_days=bezirk_availability_chart.full_days) }}</figcaption>
 </figure>
 <ul class="chart-legend">
 {% for bez in bezirk_availability_chart.bezirke %}
@@ -147,12 +112,9 @@
 {% endfor %}
 </ul>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
+<summary>{{ t("common.show_table") }}</summary>
 <table>
-<caption>
-<span lang="de">Verfügbare Räder je Bezirk und Uhrzeit (Mo-Fr)</span>
-<span lang="en">Bikes available by Bezirk and local hour (Mo-Fr)</span>
-</caption>
+<caption>{{ t("bezirke.table.caption") }}</caption>
 <thead>
 <tr>
 <th scope="col">Bezirk</th>
@@ -175,11 +137,11 @@
 </details>
 {% else %}
 <p class="not-enough-data">
-{{ bezirk_availability_chart.message }} ({{ bezirk_availability_chart.full_days }}/{{ min_full_days }})
+{{ t("common.not_enough_data") }} ({{ bezirk_availability_chart.full_days }}/{{ min_full_days }})
 </p>
 {% endif %}
 </article>
-<article>
+<article id="flow">
 <section lang="de">
 <h2>Netto-Fluss zwischen Bezirken</h2>
 <p>Netto gewonnene oder verlorene Räder je Bezirk und Uhrzeit, Mo-Fr im Mittel pro Tag (Europe/Berlin).</p>
@@ -236,11 +198,11 @@
 </details>
 {% else %}
 <p class="not-enough-data">
-{{ flow_chart.message }} ({{ flow_chart.full_days }}/{{ min_full_days }})
+{{ t("common.not_enough_data") }} ({{ flow_chart.full_days }}/{{ min_full_days }})
 </p>
 {% endif %}
 </article>
-<article>
+<article id="weather">
 <section lang="de">
 <h2>Verfügbarkeit bei Regen und Kälte</h2>
 <p>Anteil leerer Stationen je Uhrzeit, bei Regen (&ge; {{ "%.1f"|format(rain_mm_threshold) }} mm/h) im Vergleich zu trocken, und bei Kälte (&lt; {{ "%.1f"|format(cold_c_threshold) }} °C) im Vergleich zu warm (Europe/Berlin).</p>
@@ -306,11 +268,11 @@
 {% endfor %}
 {% else %}
 <p class="not-enough-data">
-{{ weather_chart.message }} ({{ weather_chart.full_days }}/{{ min_full_days }})
+{{ t("common.not_enough_data") }} ({{ weather_chart.full_days }}/{{ min_full_days }})
 </p>
 {% endif %}
 </article>
-<article>
+<article id="footprint">
 <section lang="de">
 <h2>Der tägliche Fußabdruck des Systems</h2>
 {% if footprint_chart.status == "ok" %}
@@ -378,7 +340,7 @@
 </details>
 {% else %}
 <p class="not-enough-data">
-{{ footprint_chart.message }} ({{ footprint_chart.full_days }}/{{ min_full_days }})
+{{ t("common.not_enough_data") }} ({{ footprint_chart.full_days }}/{{ min_full_days }})
 </p>
 {% endif %}
 </article>
