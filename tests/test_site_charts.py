@@ -11,11 +11,14 @@ from berlinbikes.analysis.availability import availability_by_hour
 from berlinbikes.analysis.db import connect
 from berlinbikes.site import build_site
 from berlinbikes.site import charts
-from berlinbikes.site.charts import CHART_FONT_SIZE, VIEW_WIDTH, nice_ticks
+from berlinbikes.site.charts import CHART_FONT_SIZE, VIEW_WIDTH, WEEKDAY_NAMES, nice_ticks
 from tests.helpers.svg import (
     assert_axes_conventions,
     assert_distinct_dasharrays,
+    chart_count,
     chart_elements,
+    main_html,
+    polyline_dasharrays,
     root_font_size,
 )
 from tests.synthetic import build_dataset
@@ -104,3 +107,43 @@ def test_headline_label_sits_inside_plot_box(site):
     data_dir, _ = site
     chart = charts.availability_chart(data_dir)
     assert chart.axes.top < chart.headline.label_y < chart.axes.bottom
+
+
+_UNIT_TOKENS = ("%", "Uhr", "Räder", "Anzahl", "Minuten", "Tag", "Bikes", "bikes", "count", "minutes", "day", "o'clock", "(h,")
+_PAGES = ["index.html", "index.en.html"]
+
+
+@pytest.mark.parametrize("name", _PAGES)
+def test_every_server_rendered_chart_meets_the_g2_conventions(site, name):
+    """G2 sweep: axes, unit titles, headline, weekday dashes/direct labels and a table fallback."""
+    html = (site[1] / name).read_text()
+    main = main_html(html)
+    n = chart_count(main)
+    assert n >= 5, f"expected the availability, shortage, bezirk, flow and footprint charts, got {n}"
+    for i in range(1, n + 1):
+        els = chart_elements(main, i)
+        svg = els[0]
+        assert svg["tag"] == "svg" and "chart" in svg["classes"]
+        label = f"{name} chart #{i} {svg['attrs'].get('aria-label')}"
+        for axis in ("axis-x", "axis-y"):
+            ticks = [e for e in els if e["tag"] == "text" and "tick" in e["classes"] and axis in e["groups"]]
+            assert ticks and all(e["text"].strip() for e in ticks), f"{label}: no tick labels on {axis}"
+        x_titles = [e["text"] for e in els if "axis-title-x" in e["classes"]]
+        y_titles = [e["text"] for e in els if "axis-title-y" in e["classes"]]
+        assert len(x_titles) == 1, label
+        if "bars" in svg["classes"]:
+            assert not y_titles, f"{label}: bar y axis is categorical"
+        else:
+            assert len(y_titles) == 1, label
+        assert any(u in t for t in x_titles + y_titles for u in _UNIT_TOKENS), f"{label}: no unit in {x_titles + y_titles}"
+        assert any(e["tag"] == "text" and "headline" in e["groups"] and e["text"].strip() for e in els), label
+        lines = polyline_dasharrays(els)
+        if len(lines) == len(WEEKDAY_NAMES):  # weekday series; Bezirk series differ by colour and legend
+            direct = [e for e in els if e["tag"] == "text" and "series-label" in e["classes"]]
+            assert len(set(lines)) == len(lines) or len(direct) >= len(lines), f"{label}: series are not distinguishable"
+
+    # Every chart figure is followed directly by its <details> table fallback.
+    figures = re.findall(r"</figure>\s*(<\w+)", main)
+    assert len(figures) == n, (len(figures), n)
+    assert all(tag == "<details" for tag in figures), figures
+    assert main.count("<details") >= n

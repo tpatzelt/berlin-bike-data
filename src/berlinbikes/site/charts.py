@@ -63,10 +63,6 @@ WEEKDAY_NAMES = (
 
 VIEW_WIDTH = 480
 VIEW_HEIGHT = 240
-_PAD_LEFT = 32
-_PAD_RIGHT = 10
-_PAD_TOP = 10
-_PAD_BOTTOM = 20
 
 
 #: Root font-size (viewBox units) of charts drawn with :class:`Axes`. At the
@@ -239,15 +235,6 @@ class AvailabilityChart:
     weekdays: list[WeekdaySeries] | None
     axes: Axes | None = None
     headline: Headline | None = None
-
-
-def _scale_x(hour: int) -> float:
-    return _PAD_LEFT + hour / 23 * (VIEW_WIDTH - _PAD_LEFT - _PAD_RIGHT)
-
-
-def _scale_y(value: float, y_min: float, y_span: float) -> float:
-    plot_height = VIEW_HEIGHT - _PAD_TOP - _PAD_BOTTOM
-    return VIEW_HEIGHT - _PAD_BOTTOM - (value - y_min) / y_span * plot_height
 
 
 def availability_chart(data_dir: str | Path) -> AvailabilityChart:
