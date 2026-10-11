@@ -37,6 +37,23 @@
     status.hidden = false;
   }
 
+  function showNotEnoughData(have, needed) {
+    var status = $("map-status");
+    var title = document.createElement("span");
+    title.className = "ned-title";
+    title.textContent = I18N.not_enough_data;
+    var bar = document.createElement("progress");
+    bar.max = needed;
+    bar.value = have;
+    bar.textContent = have + "/" + needed;
+    var count = document.createElement("span");
+    count.className = "ned-count";
+    count.textContent = I18N.days_collected.replace("{days}", have).replace("{needed}", needed);
+    status.textContent = "";
+    status.append(title, " ", bar, " ", count);
+    status.hidden = false;
+  }
+
   function render() {
     var svg = $("profile-chart");
     var tbody = document.querySelector("#profile-table tbody");
@@ -132,7 +149,7 @@
   function init(data) {
     state.data = data;
     if (data.status !== "ok") {
-      showStatus(I18N.not_enough_data + " (" + data.full_days + " / 14)");
+      showNotEnoughData(data.full_days, data.min_full_days);
       return;
     }
     $("profile-days").textContent = I18N.days.replace("{n}", data.full_days);

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ t("title.index") }}{% endblock %}
 {% block content %}
-{% import "_chart.html" as chart %}
+{% import "_chart.html" as chart with context %}
 <article id="availability">
 <h2>{{ t("availability.heading") }}</h2>
 <p>{{ t("availability.intro") }}</p>
@@ -47,9 +47,7 @@
 </table>
 </details>
 {% else %}
-<p class="not-enough-data">
-{{ t("common.not_enough_data") }} ({{ availability_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(availability_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
 <article id="shortage">
@@ -96,9 +94,7 @@
 </table>
 </details>
 {% else %}
-<p class="not-enough-data">
-{{ t("common.not_enough_data") }} ({{ shortage_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(shortage_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
 <article id="bezirke">
@@ -148,9 +144,7 @@
 </table>
 </details>
 {% else %}
-<p class="not-enough-data">
-{{ t("common.not_enough_data") }} ({{ bezirk_availability_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(bezirk_availability_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
 <article id="flow">
@@ -201,9 +195,7 @@
 </table>
 </details>
 {% else %}
-<p class="not-enough-data">
-{{ t("common.not_enough_data") }} ({{ flow_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(flow_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
 <article id="weather">
@@ -272,9 +264,7 @@
 {% endfor %}
 {% endfor %}
 {% else %}
-<p class="not-enough-data">
-{{ t("common.not_enough_data") }} ({{ weather_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(weather_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
 <article id="footprint">
@@ -340,9 +330,7 @@
 </table>
 </details>
 {% else %}
-<p class="not-enough-data">
-{{ t("common.not_enough_data") }} ({{ footprint_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(footprint_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
 {% endblock %}
