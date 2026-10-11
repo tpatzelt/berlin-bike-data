@@ -154,3 +154,12 @@ def test_show_ortsteil_hidden_override():
     assert "display: inline-flex" in _rule_body_containing(css, ".show-ortsteil")
     m = re.search(r"(?m)^\.show-ortsteil\[hidden\]\s*\{([^}]*)\}", css)
     assert m and "display: none" in m.group(1)
+
+
+def test_build_site_ignores_env_base_url(tmp_path, synthetic_data_dir, monkeypatch):
+    monkeypatch.setenv("BIKES_SITE_BASE_URL", "https://example.invalid")
+    out = tmp_path / "site"
+    build_site(synthetic_data_dir, out)
+    html = (out / "index.html").read_text()
+    assert "example.invalid" not in html
+    assert re.search(r'<meta property="og:image" content="(?!https?:)', html)
