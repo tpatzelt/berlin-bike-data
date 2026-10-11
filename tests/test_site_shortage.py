@@ -168,18 +168,20 @@ def test_shortage_axes_ticks_gridlines_titles_and_headline(synthetic_data_dir, t
 
 def test_shortage_text_is_legible_and_never_overlaps(synthetic_data_dir, tmp_path):
     from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH, shortage_chart
-    from tests.helpers.svg import assert_no_overlaps_and_inside, root_font_size
+    from tests.helpers.svg import assert_no_overlaps_and_inside, svg_font_size
 
     build_site(synthetic_data_dir, tmp_path / "site")
     html = (tmp_path / "site" / "index.html").read_text()
-    assert 'font-size="10px"' not in html and "font-size: 10px" not in (
-        (tmp_path / "site" / "static" / "site.css").read_text() if (tmp_path / "site" / "static" / "site.css").exists() else ""
-    )
+    css_path = tmp_path / "site" / "site.css"
+    assert css_path.exists()
+    css = css_path.read_text()
+    assert "font-size" in css
+    assert 'font-size="10px"' not in html and "font-size: 10px" not in css
     chart = shortage_chart(synthetic_data_dir)
     width, height = (float(v) for v in chart.view_box.split()[2:])
     assert CHART_FONT_SIZE * 328 / width >= 11
     els = _bars_svg(html)
-    assert root_font_size(html.replace('class="chart bars"', 'class="chart"')) == CHART_FONT_SIZE
+    assert svg_font_size(html, "bars") == CHART_FONT_SIZE
     from tests.helpers.svg import text_boxes
 
     assert_no_overlaps_and_inside(text_boxes(els, CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH), width, height)

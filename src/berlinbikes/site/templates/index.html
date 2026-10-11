@@ -224,8 +224,8 @@
 {% endfor %}
 {% if kind_chart.headline %}
 {% set vals = [] %}
-{% for bucket in kind_chart.buckets %}
-{% if bucket.hours[8] is not none %}{% set _ = vals.append((bucket["label_" ~ lang], (("%.1f"|format(bucket.hours[8]))|replace(".", ",") if lang == "de" else "%.1f"|format(bucket.hours[8])))) %}{% endif %}
+{% for label_de, label_en, value_de, value_en in kind_chart.headline_values %}
+{% set _ = vals.append((label_de if lang == "de" else label_en, value_de if lang == "de" else value_en)) %}
 {% endfor %}
 {% if vals|length == 2 %}
 {% set label = t("weather.headline.both", first=vals[0][0], first_value=vals[0][1], second=vals[1][0], second_value=vals[1][1]) %}

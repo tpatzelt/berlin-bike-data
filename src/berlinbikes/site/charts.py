@@ -721,6 +721,9 @@ class WeatherKindChart:
     headline_points: list[Headline] | None = None
     #: The point carrying the label text (the lowest marker), or None.
     headline: Headline | None = None
+    #: (label_de, label_en, value_de, value_en) per marked bucket, values at WEATHER_HEADLINE_HOUR
+    #: formatted to one decimal (decimal comma in de).
+    headline_values: list[tuple[str, str, str, str]] | None = None
 
 
 @dataclass(frozen=True)
@@ -854,6 +857,9 @@ def _weather_kind_chart(kind: str, by_bucket: dict[str, dict[int, float]], exclu
         axes=axes,
         headline_points=headline_points,
         headline=headline,
+        headline_values=[
+            (series.label_de, series.label_en, f"{value:.1f}".replace(".", ","), f"{value:.1f}") for value, series in at_8
+        ],
     )
 
 
