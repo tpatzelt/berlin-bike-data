@@ -41,7 +41,7 @@ of bikes in the system that day, colored via ``--series-1`` (e-bike),
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from berlinbikes.analysis.availability import availability_by_hour
@@ -514,14 +514,16 @@ def flow_chart(data_dir: str | Path) -> FlowChart:
 #: How many stations the morning-shortage bar chart shows.
 SHORTAGE_TOP_N = 10
 
-_BAR_VIEW_WIDTH = 480
-_BAR_HEIGHT = 18
-_BAR_GAP = 8
-_BAR_PAD_LEFT = 150
-_BAR_PAD_RIGHT = 54
-_BAR_PAD_TOP = 8
-_BAR_PAD_BOTTOM = 8
+_BAR_HEIGHT = 22
+_BAR_GAP = 10
+_BAR_PAD_LEFT = 172
+_BAR_PAD_RIGHT = 96
+_BAR_PAD_TOP = 14
+_BAR_PAD_BOTTOM = 62
 _BAR_MIN_VIEW_HEIGHT = 60
+
+#: Longest station label (characters) that fits left of the bars at CHART_FONT_SIZE.
+_BAR_LABEL_CHARS = 17
 
 _WEEKDAY_ABBR_DE = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
 _WEEKDAY_ABBR_EN = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -548,6 +550,9 @@ class ShortageBar:
     bar_height: float
     label_y: float
     value_x: float
+    label: str = ""
+    label_x: float = 0.0
+    is_top: bool = False
 
 
 @dataclass(frozen=True)
@@ -559,11 +564,26 @@ class ShortageChart:
     view_box: str
     aria_label: str
     bars: list[ShortageBar] | None
+    font_size: float = CHART_FONT_SIZE
+    left: float = 0.0
+    right: float = 0.0
+    top: float = 0.0
+    bottom: float = 0.0
+    x_ticks: list[Tick] | None = None
+    x_title_x: float = 0.0
+    x_title_y: float = 0.0
+    headline: Headline | None = None
 
 
 def _bar_view_height(n: int) -> float:
     n = max(n, 1)
     return _BAR_PAD_TOP + _BAR_PAD_BOTTOM + n * _BAR_HEIGHT + (n - 1) * _BAR_GAP
+
+
+def _station_label(station_id: str, ortsteil: str) -> str:
+    """``id (ortsteil)``, cut with an ellipsis to fit the label column; the table has the full text."""
+    label = f"{station_id} ({ortsteil})"
+    return label if len(label) <= _BAR_LABEL_CHARS else label[: _BAR_LABEL_CHARS - 1] + "…"
 
 
 def shortage_chart(data_dir: str | Path) -> ShortageChart:
@@ -577,6 +597,9 @@ def shortage_chart(data_dir: str | Path) -> ShortageChart:
     ``share_empty_at_0800=None``; this is rendered as ``share_pct=None`` so
     the headline sentence is left out, while the bar chart and table still
     render.
+
+    The value axis (empty minutes per day) is horizontal with round ticks and
+    gridlines; the top station's value is the marked headline.
     """
     result = morning_shortage(connect(data_dir))
     de_label, en_label = _window_label(MORNING_WINDOW)
@@ -586,7 +609,7 @@ def shortage_chart(data_dir: str | Path) -> ShortageChart:
             full_days=result.full_days,
             message=result.message,
             share_pct=None,
-            view_box=f"0 0 {_BAR_VIEW_WIDTH} {_BAR_MIN_VIEW_HEIGHT}",
+            view_box=f"0 0 {VIEW_WIDTH} {_BAR_MIN_VIEW_HEIGHT}",
             aria_label="",
             bars=None,
         )
@@ -596,24 +619,44 @@ def shortage_chart(data_dir: str | Path) -> ShortageChart:
 
     top_stations = result.rows["stations"][:SHORTAGE_TOP_N]
     values = [minutes_per_day for *_rest, minutes_per_day in top_stations]
-    max_value = max(values) if values else 1.0
-    plot_width = _BAR_VIEW_WIDTH - _BAR_PAD_LEFT - _BAR_PAD_RIGHT
+    ticks = nice_ticks(0.0, max(values) if values else 1.0)
+    x_max = ticks[-1]
+    left, right = _BAR_PAD_LEFT, VIEW_WIDTH - _BAR_PAD_RIGHT
+    plot_width = right - left
+    view_height = _bar_view_height(len(top_stations))
+    bottom = view_height - _BAR_PAD_BOTTOM
+    top_index = values.index(max(values)) if values else -1
 
     bars = []
+    headline = None
     for i, (station_id, _bezirk, ortsteil, _total, minutes_per_day) in enumerate(top_stations):
         bar_y = _BAR_PAD_TOP + i * (_BAR_HEIGHT + _BAR_GAP)
-        bar_width = (minutes_per_day / max_value) * plot_width if max_value else 0.0
+        bar_width = minutes_per_day / x_max * plot_width
+        text_y = bar_y + _BAR_HEIGHT / 2 + CHART_FONT_SIZE * 0.35
+        if i == top_index:
+            headline = Headline(
+                x=left + bar_width,
+                y=bar_y + _BAR_HEIGHT / 2,
+                value=minutes_per_day,
+                hour=0,
+                anchor="start",
+                label_x=left + bar_width + 10,
+                label_y=text_y,
+            )
         bars.append(
             ShortageBar(
                 station_id=station_id,
                 ortsteil=ortsteil,
                 minutes_per_day=minutes_per_day,
-                bar_x=_BAR_PAD_LEFT,
+                bar_x=left,
                 bar_y=bar_y,
                 bar_width=bar_width,
                 bar_height=_BAR_HEIGHT,
-                label_y=bar_y + _BAR_HEIGHT * 0.65,
-                value_x=_BAR_PAD_LEFT + bar_width + 4,
+                label_y=text_y,
+                value_x=left + bar_width + 4,
+                label=_station_label(station_id, ortsteil),
+                label_x=left - 6,
+                is_top=i == top_index,
             )
         )
 
@@ -627,9 +670,17 @@ def shortage_chart(data_dir: str | Path) -> ShortageChart:
         full_days=result.full_days,
         message=None,
         share_pct=share_pct,
-        view_box=f"0 0 {_BAR_VIEW_WIDTH} {_bar_view_height(len(bars))}",
+        view_box=f"0 0 {VIEW_WIDTH} {view_height}",
         aria_label=aria_label,
         bars=bars,
+        left=left,
+        right=right,
+        top=_BAR_PAD_TOP,
+        bottom=bottom,
+        x_ticks=[Tick(left + t / x_max * plot_width, _fmt_tick(t)) for t in ticks],
+        x_title_x=VIEW_WIDTH / 2,
+        x_title_y=view_height - 6,
+        headline=headline,
     )
 
 
@@ -760,13 +811,19 @@ def weather_effect_chart(data_dir: str | Path) -> WeatherEffectChart:
     )
 
 
-_FOOT_VIEW_WIDTH = 480
-_FOOT_VIEW_HEIGHT = 240
-_FOOT_PAD_LEFT = 36
-_FOOT_PAD_RIGHT = 10
-_FOOT_PAD_TOP = 10
-_FOOT_PAD_BOTTOM = 10
 _FOOT_BAR_GAP = 1
+
+#: Room right of the stacks for the direct segment labels (swatch + name).
+_FOOT_LABEL_MARGIN = 104
+
+#: Minimum horizontal distance between date tick labels, in viewBox units.
+_FOOT_TICK_SPACING = 64
+
+#: Headroom above the tallest stack, as a factor, so the headline row stays clear of the bars.
+_FOOT_HEADROOM = 1.15
+
+#: Vertical distance between direct segment labels, in em.
+_FOOT_LABEL_LINE = 1.25
 
 
 @dataclass(frozen=True)
@@ -789,6 +846,15 @@ class FootprintBar:
 
 
 @dataclass(frozen=True)
+class SegmentLabel:
+    """A direct label next to the last bar: ``key`` is ebike/pedal/unknown."""
+
+    key: str
+    x: float
+    y: float
+
+
+@dataclass(frozen=True)
 class FootprintChart:
     status: str
     full_days: int
@@ -798,6 +864,27 @@ class FootprintChart:
     latest_n_stations: int | None
     latest_bikes_total: float | None
     bars: list[FootprintBar] | None
+    axes: Axes | None = None
+    headline: Headline | None = None
+    segment_labels: list[SegmentLabel] | None = None
+
+
+def _segment_labels(axes: Axes, last: FootprintBar) -> list[SegmentLabel]:
+    """Labels at the segments' mid-heights, pushed apart so no two overlap and kept inside the plot."""
+    gap = CHART_FONT_SIZE * _FOOT_LABEL_LINE
+    mids = [
+        last.ebike_y + last.ebike_height / 2,
+        last.pedal_y + last.pedal_height / 2,
+        last.unknown_y + last.unknown_height / 2,
+    ]
+    ys = [m + CHART_FONT_SIZE * 0.35 for m in mids]  # baselines, bottom stack first
+    for i in range(1, 3):
+        ys[i] = min(ys[i], ys[i - 1] - gap)
+    ys[2] = max(ys[2], axes.top + CHART_FONT_SIZE)
+    for i in (1, 0):
+        ys[i] = max(ys[i], ys[i + 1] + gap)
+    x = last.bar_x + last.bar_width + 6
+    return [SegmentLabel(key, x, y) for key, y in zip(("ebike", "pedal", "unknown"), ys, strict=True)]
 
 
 def footprint_chart(data_dir: str | Path) -> FootprintChart:
@@ -816,7 +903,7 @@ def footprint_chart(data_dir: str | Path) -> FootprintChart:
             status=result.status,
             full_days=result.full_days,
             message=result.message,
-            view_box=f"0 0 {_FOOT_VIEW_WIDTH} {_FOOT_VIEW_HEIGHT}",
+            view_box=f"0 0 {VIEW_WIDTH} {_AXES_VIEW_HEIGHT}",
             latest_date=None,
             latest_n_stations=None,
             latest_bikes_total=None,
@@ -825,26 +912,31 @@ def footprint_chart(data_dir: str | Path) -> FootprintChart:
 
     rows = result.rows
     totals = [ebikes + pedal_bikes + unknown for *_rest, ebikes, pedal_bikes, unknown in rows]
-    y_max = max(totals) if totals else 1.0
-    y_max = y_max or 1.0
-
-    plot_width = _FOOT_VIEW_WIDTH - _FOOT_PAD_LEFT - _FOOT_PAD_RIGHT
-    plot_height = _FOOT_VIEW_HEIGHT - _FOOT_PAD_TOP - _FOOT_PAD_BOTTOM
+    y_top = (max(totals) if totals else 1.0) or 1.0
+    base_axes = build_axes(0.0, y_top * _FOOT_HEADROOM)
+    right = VIEW_WIDTH - _FOOT_LABEL_MARGIN
     n = len(rows)
+    plot_width = right - base_axes.left
     bar_width = (plot_width - (n - 1) * _FOOT_BAR_GAP) / n if n else 0.0
-    baseline_y = _FOOT_VIEW_HEIGHT - _FOOT_PAD_BOTTOM
+    pitch = bar_width + _FOOT_BAR_GAP
+    step = max(1, math.ceil(_FOOT_TICK_SPACING / pitch)) if pitch else 1
+    dates = [row[0] for row in rows]
+    # Ticks count back from the latest day; one whose label would reach the y tick labels is dropped.
+    half_label = 5 * HEADLINE_CHAR_WIDTH * CHART_FONT_SIZE / 2
+    x_ticks = [
+        Tick(base_axes.left + i * pitch + bar_width / 2, dates[i].strftime("%m-%d"))
+        for i in range(n - 1, -1, -step)[::-1]
+        if base_axes.left + i * pitch + bar_width / 2 - half_label >= base_axes.left
+    ]
+    axes = replace(base_axes, right=right, x_ticks=x_ticks, x_title_x=(base_axes.left + right) / 2)
 
     bars = []
     for i, (local_date, n_stations, bikes_at_stations, bikes_free_floating, ebikes, pedal_bikes, unknown) in enumerate(
         rows
     ):
-        scale = plot_height / y_max
-        ebike_height = ebikes * scale
-        pedal_height = pedal_bikes * scale
-        unknown_height = unknown * scale
-        ebike_y = baseline_y - ebike_height
-        pedal_y = ebike_y - pedal_height
-        unknown_y = pedal_y - unknown_height
+        ebike_y = axes.scale_y(ebikes)
+        pedal_y = axes.scale_y(ebikes + pedal_bikes)
+        unknown_y = axes.scale_y(ebikes + pedal_bikes + unknown)
         bars.append(
             FootprintBar(
                 date=local_date.isoformat(),
@@ -854,25 +946,39 @@ def footprint_chart(data_dir: str | Path) -> FootprintChart:
                 ebikes=ebikes,
                 pedal_bikes=pedal_bikes,
                 unknown_type=unknown,
-                bar_x=_FOOT_PAD_LEFT + i * (bar_width + _FOOT_BAR_GAP),
+                bar_x=axes.left + i * pitch,
                 bar_width=bar_width,
                 ebike_y=ebike_y,
-                ebike_height=ebike_height,
+                ebike_height=axes.bottom - ebike_y,
                 pedal_y=pedal_y,
-                pedal_height=pedal_height,
+                pedal_height=ebike_y - pedal_y,
                 unknown_y=unknown_y,
-                unknown_height=unknown_height,
+                unknown_height=pedal_y - unknown_y,
             )
         )
 
     latest = bars[-1]
+    latest_total = latest.ebikes + latest.pedal_bikes + latest.unknown_type
+    latest_x = latest.bar_x + latest.bar_width / 2
+    headline = Headline(
+        x=latest_x,
+        y=axes.scale_y(latest_total),
+        value=latest_total,
+        hour=0,
+        anchor="end",
+        label_x=axes.right,
+        label_y=axes.top + CHART_FONT_SIZE,
+    )
     return FootprintChart(
         status="ok",
         full_days=result.full_days,
         message=None,
-        view_box=f"0 0 {_FOOT_VIEW_WIDTH} {_FOOT_VIEW_HEIGHT}",
+        view_box=axes.view_box,
         latest_date=latest.date,
         latest_n_stations=latest.n_stations,
-        latest_bikes_total=latest.ebikes + latest.pedal_bikes + latest.unknown_type,
+        latest_bikes_total=latest_total,
         bars=bars,
+        axes=axes,
+        headline=headline,
+        segment_labels=_segment_labels(axes, latest),
     )

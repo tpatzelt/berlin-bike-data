@@ -72,7 +72,11 @@ svg.chart .zero-line { stroke: var(--fg); stroke-width: 1.5; }
 
 .chart-legend .swatch-line { display: block; }
 
-svg.bars text { font-size: 10px; fill: var(--fg); }
+svg.bars text, svg.footprint text { fill: var(--fg); }
+
+svg.chart .segment-sep { stroke: var(--bg); stroke-width: 1; }
+
+svg.chart .pattern-line { stroke: var(--bg); stroke-width: 2; }
 
 table { border-collapse: collapse; }
 

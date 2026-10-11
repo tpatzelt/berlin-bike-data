@@ -65,6 +65,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "Stationen mit den meisten leeren Minuten pro Tag im Morgenfenster (Mo–Fr 7:30–8:30 Uhr), auf Basis von {full_days} vollen Tagen.",
         "en": "Stations with the most empty minutes per day in the morning window (Mon–Fri 7:30–8:30), based on {full_days} full days.",
     },
+    "shortage.axis.x": {
+        "de": "Leere Minuten pro Tag (Mo–Fr 7:30–8:30)",
+        "en": "Empty minutes per day (Mon–Fri 7:30–8:30)",
+    },
+    "shortage.headline": {"de": "{value} Min.", "en": "{value} min"},
     "shortage.table.caption": {
         "de": "Leere Minuten pro Tag im Morgenfenster, nach Station",
         "en": "Empty minutes per day in the morning window, by station",
@@ -155,6 +160,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "Räder im System je vollem Tag, aufgeteilt in E-Bike, Pedal und unbekannt, auf Basis von {full_days} vollen Tagen.",
         "en": "Bikes in the system per full day, split into e-bike, pedal and unknown, based on {full_days} full days.",
     },
+    "footprint.axis.x": {"de": "Datum (Tag, Europe/Berlin)", "en": "Date (day, Europe/Berlin)"},
+    "footprint.axis.y": {"de": "Räder im System (Anzahl)", "en": "Bikes in the system (count)"},
+    "footprint.headline": {"de": "{value} Räder", "en": "{value} bikes"},
     "footprint.legend.ebike": {"de": "E-Bike", "en": "e-bike"},
     "footprint.legend.pedal": {"de": "Pedal", "en": "pedal"},
     "footprint.legend.unknown": {"de": "unbekannt", "en": "unknown"},

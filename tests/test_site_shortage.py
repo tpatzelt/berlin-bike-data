@@ -132,3 +132,71 @@ def test_shortage_aria_label_keeps_the_weekday_range_in_both_languages(synthetic
         bar_svgs = [s for s in _find_all(root, "svg") if "bars" in (s.attrs.get("class") or "").split()]
         assert len(bar_svgs) == 1
         assert expected in bar_svgs[0].attrs["aria-label"]
+
+
+def _bars_svg(html):
+    from tests.helpers.svg import chart_by_class
+
+    els = chart_by_class(html, "bars")
+    assert els
+    return els
+
+
+def test_shortage_axes_ticks_gridlines_titles_and_headline(synthetic_data_dir, tmp_path):
+    from berlinbikes.site.charts import shortage_chart
+
+    build_site(synthetic_data_dir, tmp_path / "site")
+    chart = shortage_chart(synthetic_data_dir)
+    top = max(b.minutes_per_day for b in chart.bars)
+    for name, title, unit in (
+        ("index.html", "Leere Minuten pro Tag (Mo–Fr 7:30–8:30)", "Min."),
+        ("index.en.html", "Empty minutes per day (Mon–Fri 7:30–8:30)", "min"),
+    ):
+        els = _bars_svg((tmp_path / "site" / name).read_text())
+        ticks = [e for e in els if e["tag"] == "text" and "tick" in e["classes"] and "axis-x" in e["groups"]]
+        assert len(ticks) >= 3 and all(t["text"].strip() for t in ticks)
+        assert float(ticks[-1]["text"]) >= top
+        assert [e for e in els if e["tag"] == "line" and "grid" in e["classes"]]
+        titles = [e for e in els if "axis-title-x" in e["classes"]]
+        assert [t["text"] for t in titles] == [title]
+        cats = [e["text"] for e in els if "tick" in e["classes"] and "axis-y" in e["groups"]]
+        assert len(cats) == len(chart.bars) and EMPTY_STATION_ID in cats[0]
+        head = [e for e in els if e["tag"] == "text" and "headline" in e["groups"]]
+        assert [h["text"] for h in head] == [f"{top:.1f} {unit}"]
+        assert any(e["tag"] == "circle" and "headline" in e["groups"] for e in els)
+
+
+def test_shortage_text_is_legible_and_never_overlaps(synthetic_data_dir, tmp_path):
+    from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH, shortage_chart
+    from tests.helpers.svg import assert_no_overlaps_and_inside, root_font_size
+
+    build_site(synthetic_data_dir, tmp_path / "site")
+    html = (tmp_path / "site" / "index.html").read_text()
+    assert 'font-size="10px"' not in html and "font-size: 10px" not in (
+        (tmp_path / "site" / "static" / "site.css").read_text() if (tmp_path / "site" / "static" / "site.css").exists() else ""
+    )
+    chart = shortage_chart(synthetic_data_dir)
+    width, height = (float(v) for v in chart.view_box.split()[2:])
+    assert CHART_FONT_SIZE * 328 / width >= 11
+    els = _bars_svg(html)
+    assert root_font_size(html.replace('class="chart bars"', 'class="chart"')) == CHART_FONT_SIZE
+    from tests.helpers.svg import text_boxes
+
+    assert_no_overlaps_and_inside(text_boxes(els, CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH), width, height)
+
+
+def test_build_site_survives_an_ok_result_with_no_stations(monkeypatch, synthetic_data_dir, tmp_path):
+    def _fake(con):
+        return MetricResult(
+            name="morning_shortage",
+            full_days=17,
+            status="ok",
+            message=None,
+            rows={"stations": [], "ortsteile": [], "share_empty_at_0800": None},
+        )
+
+    monkeypatch.setattr(charts_module, "morning_shortage", _fake)
+    build_site(synthetic_data_dir, tmp_path / "site")
+    assert "headline" not in " ".join(
+        " ".join(e["classes"] + e["groups"]) for e in _bars_svg((tmp_path / "site" / "index.html").read_text())
+    )
