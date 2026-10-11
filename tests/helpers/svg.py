@@ -162,3 +162,10 @@ def chart_count(html: str) -> int:
     parser = _Svg()
     parser.feed(html)
     return sum(1 for e in parser.elements if e["tag"] == "svg" and "chart" in e["classes"])
+
+
+def svg_font_size(html: str, cls: str) -> float:
+    """``font-size`` of the root ``<svg>`` whose class list contains ``chart`` and ``cls``."""
+    els = chart_by_class(html, cls)
+    assert els and els[0]["tag"] == "svg", f"no chart svg with class {cls}"
+    return float(els[0]["attrs"]["font-size"])

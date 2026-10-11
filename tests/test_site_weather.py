@@ -306,3 +306,18 @@ def test_missing_bucket_marks_only_the_present_one():
     assert chart.missing_buckets == [("regnerisch", "rainy")]
     assert len(chart.headline_points) == 1
     assert chart.headline_points[0].value == 18.0
+
+
+def test_headline_values_follow_the_headline_hour_with_locale_decimals(monkeypatch):
+    from berlinbikes.site import charts
+
+    by_bucket = {"rainy": {h: 10.0 + h / 10 for h in range(24)}, "dry": {h: 20.0 + h / 4 for h in range(24)}}
+    axes = build_axes(0, 40)
+    first = _weather_kind_chart("rain", by_bucket, 0, axes)
+    assert first.headline_values == [
+        ("regnerisch", "rainy", "10,8", "10.8"),
+        ("trocken", "dry", "22,0", "22.0"),
+    ]
+    monkeypatch.setattr(charts, "WEATHER_HEADLINE_HOUR", 12)
+    moved = _weather_kind_chart("rain", by_bucket, 0, axes)
+    assert [v[3] for v in moved.headline_values] == ["11.2", "23.0"]
