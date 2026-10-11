@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import struct
 from html.parser import HTMLParser
 from pathlib import Path
@@ -107,3 +108,49 @@ def test_site_base_url_config(monkeypatch):
     env = {"BIKES_DATA_DIR": "d", "BIKES_USER_AGENT": "ua"}
     assert Settings.from_env(env).site_base_url == ""
     assert Settings.from_env({**env, "BIKES_SITE_BASE_URL": " https://example.org/ "}).site_base_url == "https://example.org"
+
+
+def _rule_body(css: str, selector_part: str) -> str:
+    m = re.search(r"(?m)^[^{}\n]*" + re.escape(selector_part) + r"[^{}]*\{([^}]*)\}", css)
+    assert m, f"no rule for {selector_part}"
+    return m.group(1)
+
+
+def test_focus_visible_outline():
+    css = (STATIC / "site.css").read_text()
+    sel = re.search(r"(?m)^([^{}\n]*:focus-visible[^{}]*)\{", css)
+    assert sel
+    for el in ("a", "button", "select", "input", "summary"):
+        assert f"{el}:focus-visible" in sel.group(1)
+    body = _rule_body(css, "a:focus-visible")
+    assert "outline: 2px solid var(--accent)" in body and "outline-offset" in body
+
+
+def test_touch_targets_44px():
+    css = (STATIC / "site.css").read_text()
+    for part in (".site-header nav a", ".lang-switch", "footer a", ".map-controls select", ".map-controls input", ".show-ortsteil"):
+        m = re.search(r"min-height:\s*([\d.]+)rem", _rule_body_containing(css, part))
+        assert m and float(m.group(1)) >= 2.75, part
+
+
+def _rule_body_containing(css: str, part: str) -> str:
+    for m in re.finditer(r"(?m)^([^{}\n]+)\{([^}]*)\}", css):
+        if part in m.group(1) and "min-height" in m.group(2):
+            return m.group(2)
+    raise AssertionError(f"no min-height rule for {part}")
+
+
+def test_reduced_motion_block():
+    css = (STATIC / "site.css").read_text()
+    m = re.search(r"@media \(prefers-reduced-motion: reduce\)\s*\{(.*?)\n\}", css, re.S)
+    assert m
+    body = m.group(1)
+    assert "transition: none" in body and "animation: none" in body and "scroll-behavior: auto" in body
+    assert "*" in body.split("{")[0]
+
+
+def test_show_ortsteil_hidden_override():
+    css = (STATIC / "site.css").read_text()
+    assert "display: inline-flex" in _rule_body_containing(css, ".show-ortsteil")
+    m = re.search(r"(?m)^\.show-ortsteil\[hidden\]\s*\{([^}]*)\}", css)
+    assert m and "display: none" in m.group(1)
