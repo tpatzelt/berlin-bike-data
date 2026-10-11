@@ -14,6 +14,7 @@
 <noscript>
 <p class="not-enough-data">{{ t("map.noscript", link='<a href="data/profiles.json">profiles.json</a>'|safe) }}</p>
 </noscript>
+{% set bin_labels = [] %}{% for b in map_bins %}{% set _ = bin_labels.append(t(b.label_key)) %}{% endfor %}
 <script type="application/json" id="map-i18n">{{ {
   "hour": map_default_hour,
   "plot": {"left": map_chart.axes.left, "right": map_chart.axes.right, "top": map_chart.axes.top, "bottom": map_chart.axes.bottom} if map_chart else none,
@@ -25,6 +26,12 @@
   "headline": t("map.headline", value="{value}", hour="{hour}"),
   "x_ticks": map_chart.axes.x_ticks | map(attribute="label") | map("int") | list if map_chart else none,
   "y_tick_target": map_y_tick_target,
+  "bins": map_bins | map(attribute="radius") | list,
+  "bin_mins": map_bins | map(attribute="min") | list,
+  "bin_labels": bin_labels,
+  "bin_none": t("map.bin.none"),
+  "no_data_radius": map_no_data_radius,
+  "marker_label": t("map.marker_label", name="{name}", bin="{bin}", hour="{hour}"),
   "ortsteil_button": t("map.ortsteil_button")
 } | tojson }}</script>
 <p id="map-status" class="not-enough-data" hidden></p>
@@ -61,6 +68,13 @@
 {% endfor %}</select>
 </p>
 </form>
+<div class="map-legend" id="map-legend">
+<h3>{{ t("map.legend.heading") }}</h3>
+<ul>
+{% for b in map_bins %}<li><svg width="{{ 2 * b.radius + 4 }}" height="{{ 2 * b.radius + 4 }}" aria-hidden="true"><circle class="avail-{{ loop.index0 }}" cx="{{ b.radius + 2 }}" cy="{{ b.radius + 2 }}" r="{{ b.radius }}"></circle></svg> {{ bin_labels[loop.index0] }}</li>
+{% endfor %}<li><svg width="{{ 2 * map_no_data_radius + 4 }}" height="{{ 2 * map_no_data_radius + 4 }}" aria-hidden="true"><circle class="avail-none" cx="{{ map_no_data_radius + 2 }}" cy="{{ map_no_data_radius + 2 }}" r="{{ map_no_data_radius }}"></circle></svg> {{ t("map.bin.none") }}</li>
+</ul>
+</div>
 <div class="map-layout">
 <div id="map" class="map" aria-label="{{ t("map.aria") }}"></div>
 <div class="map-detail">

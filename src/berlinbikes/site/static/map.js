@@ -12,10 +12,6 @@
 
   var I18N = JSON.parse($("map-i18n").textContent);
 
-  function cssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  }
-
   function el(tag, attrs, text) {
     var node = document.createElementNS(SVG_NS, tag);
     Object.keys(attrs).forEach(function (k) { node.setAttribute(k, attrs[k]); });
@@ -53,6 +49,7 @@
   }
 
   function render() {
+    if (state.data && state.data.stations) styleMarkers();
     var svg = $("profile-chart");
     if (!svg) return;
     var tbody = document.querySelector("#profile-table tbody");
@@ -119,12 +116,44 @@
     });
   }
 
+  // Index of the display bin for a mean (see charts.MAP_BINS), or -1 without a value.
+  function binOf(value) {
+    if (value === null || value === undefined) return -1;
+    var bin = 0;
+    I18N.bin_mins.forEach(function (lo, i) { if (value >= lo) bin = i; });
+    return bin;
+  }
+
+  function markerRadius(bin) {
+    return bin < 0 ? I18N.no_data_radius : I18N.bins[bin];
+  }
+
+  function binLabel(bin) {
+    return bin < 0 ? I18N.bin_none : I18N.bin_labels[bin];
+  }
+
+  // Colour (class), size and accessible name of every marker for the picked weekday and hour.
+  function styleMarkers() {
+    var weekday = Number($("pick-weekday").value), hour = Number($("pick-hour").value);
+    state.data.stations.forEach(function (s) {
+      var marker = state.markers[s.id];
+      if (!marker) return;
+      var bin = binOf(s.curve[weekday][hour]);
+      var selected = s.id === state.selected;
+      marker.setStyle({ weight: selected ? 3 : 1 });
+      marker.setRadius(markerRadius(bin) + (selected ? 3 : 0));
+      if (selected) marker.bringToFront();
+      var path = marker.getElement();
+      if (!path) return;
+      path.setAttribute("class", path.getAttribute("class").replace(/\s*\bavail-\S+/g, "") + " avail-" + (bin < 0 ? "none" : bin));
+      path.setAttribute("role", "button");
+      path.setAttribute("aria-label", I18N.marker_label.replace("{name}", function () { return stationLabel(s); })
+        .replace("{bin}", function () { return binLabel(bin); }).replace("{hour}", hour));
+    });
+  }
+
   function highlight(id) {
-    if (state.selected && state.markers[state.selected]) {
-      state.markers[state.selected].setStyle({ radius: 5, weight: 1 });
-    }
-    state.selected = id;
-    if (id && state.markers[id]) state.markers[id].setStyle({ radius: 9, weight: 3 }).bringToFront();
+    state.selected = id;  // styleMarkers (called by render) draws it larger and bolder
   }
 
   function stationById(id) {
@@ -217,9 +246,8 @@
       maxZoom: 18,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
-    var colour = cssVar("--accent");
     stations.forEach(function (s) {
-      var marker = L.circleMarker([s.lat, s.lon], { radius: 5, weight: 1, color: colour, fillOpacity: 0.6 })
+      var marker = L.circleMarker([s.lat, s.lon], { radius: 5, weight: 1, fillOpacity: 0.85 })
         .bindTooltip(s.name)
         .on("click", function () { if (pickStation(s.id)) writeHash(); })
         .addTo(map);

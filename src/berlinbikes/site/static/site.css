@@ -13,6 +13,10 @@
   --series-7: #4a3aa7;
   --surface: #f5f5f5;
   --border: #b5b5b5;
+  --avail-0: #b42318;
+  --avail-1: #b45309;
+  --avail-2: #3f7f1a;
+  --avail-3: #0a6ebd;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -51,6 +55,10 @@
     --series-7: #9085e9;
     --surface: #1e1e1e;
     --border: #555555;
+    --avail-0: #ff6b5e;
+    --avail-1: #f0a030;
+    --avail-2: #8fd45c;
+    --avail-3: #6ab0f3;
   }
 }
 
@@ -179,6 +187,30 @@ header, main, footer { max-width: 64rem; margin-inline: auto; }
 @media (min-width: 48rem) {
   .map-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }
+
+.map-legend { margin: 0 0 var(--space-4); }
+
+.map-legend ul { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-5); list-style: none; margin: 0; padding: 0; }
+
+.map-legend li { display: flex; align-items: center; gap: var(--space-2); }
+
+.map-legend svg { flex: none; }
+
+.avail-0 { fill: var(--avail-0); }
+
+.avail-1 { fill: var(--avail-1); }
+
+.avail-2 { fill: var(--avail-2); }
+
+.avail-3 { fill: var(--avail-3); }
+
+.avail-none { fill: none; stroke-dasharray: 2 2; }
+
+path.avail-none { fill-opacity: 0; }
+
+.map-legend [class^="avail-"] { stroke: var(--fg); stroke-width: 1.5; fill-opacity: 0.85; }
+
+path.leaflet-interactive[class*="avail-"] { stroke: var(--fg); }
 
 .map-credit { font-size: var(--step--1); color: var(--muted); }
 

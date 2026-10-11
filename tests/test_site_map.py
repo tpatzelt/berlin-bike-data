@@ -13,7 +13,7 @@ from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.profiles import station_profiles
 from berlinbikes.site import build_site
-from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH, MAP_DEFAULT_HOUR, map_profile_chart
+from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH, MAP_BINS, MAP_DEFAULT_HOUR, map_profile_chart
 from berlinbikes.site.profiles import profiles_payload
 from tests.helpers.svg import (
     assert_axes_conventions,
@@ -143,7 +143,7 @@ def test_map_pages_are_single_language(map_site):
 def test_map_i18n_json_is_per_language_and_complete(map_site):
     de = json.loads(_collect(map_site / "map.html").i18n_json)
     en = json.loads(_collect(map_site / "map.en.html").i18n_json)
-    assert set(de) == set(en) == {"days", "ortsteil_title", "load_error", "hour", "plot", "axis_x", "axis_y", "headline", "x_ticks", "y_tick_target", "ortsteil_button"}
+    assert set(de) == set(en) == {"days", "ortsteil_title", "load_error", "hour", "plot", "axis_x", "axis_y", "headline", "x_ticks", "y_tick_target", "ortsteil_button", "bins", "bin_mins", "bin_labels", "bin_none", "no_data_radius", "marker_label"}
     assert de["days"] == "({n} Tage)" and en["days"] == "({n} days)"
     assert de["load_error"].startswith("Daten") and en["load_error"].startswith("Could not")
     assert en["ortsteil_title"] == "District {name}"
@@ -317,3 +317,51 @@ def test_map_page_has_hour_picker_search_and_ortsteil_button(map_site, page, lan
     assert i18n["ortsteil_button"] == {"de": "Ganzes Ortsteil zeigen", "en": "Show the whole Ortsteil"}[lang]
     assert i18n["x_ticks"][0] == 0 and i18n["y_tick_target"] >= 1
     assert 'id="show-ortsteil"' in html
+
+
+@pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
+def test_map_page_has_a_legend_with_every_bin_swatch_size_and_label(map_site, page, lang):
+    html = (map_site / page).read_text()
+    assert 'id="map-legend"' in html
+    legend = html[html.index('id="map-legend"'):html.index('class="map-layout"')]
+    labels = {
+        "de": ["0 Räder", "unter 1 Rad", "1–3 Räder", "3 oder mehr Räder", "keine Daten"],
+        "en": ["0 bikes", "under 1 bike", "1–3 bikes", "3 or more bikes", "no data"],
+    }[lang]
+    for label in labels:
+        assert label in legend
+    radii = [int(r) for r in re.findall(r'<circle class="avail-\d"[^>]* r="(\d+)"', legend)]
+    assert len(radii) == len(MAP_BINS) == 4
+    assert radii == [r for _, r in MAP_BINS]
+    assert len(set(radii)) == len(radii)  # size is a second cue besides colour
+    i18n = json.loads(_collect(map_site / page).i18n_json)
+    assert i18n["bin_labels"] == labels[:-1] and i18n["bin_none"] == labels[-1]
+    assert i18n["bins"] == radii and i18n["bin_mins"] == [lo for lo, _ in MAP_BINS]
+    assert "{name}" in i18n["marker_label"] and "{bin}" in i18n["marker_label"]
+
+
+def test_map_js_names_markers_from_catalog_strings_and_bins_from_the_page():
+    js = _JS.read_text()
+    assert 'setAttribute("aria-label"' in js and 'setAttribute("role", "button")' in js
+    assert "I18N.marker_label" in js and "I18N.bin_labels" in js and "I18N.bin_mins" in js
+    assert "getElement()" in js and "setRadius(" in js
+    assert not re.search(r"\b(?:Räder|bikes)\b", js)
+
+
+def test_avail_tokens_exist_in_both_themes_and_have_contrast(map_site):
+    css = (map_site / "site.css").read_text()
+    root = re.search(r":root\s*{([^}]*)}", css).group(1)
+    dark = re.search(r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}", css).group(1)
+
+    def lum(h):
+        c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+    for body, bg in ((root, "#ffffff"), (dark, "#121212")):
+        for i in range(len(MAP_BINS)):
+            m = re.search(rf"--avail-{i}:\s*(#[0-9a-fA-F]{{6}});", body)
+            assert m, i
+            hi, lo = sorted((lum(m.group(1)), lum(bg)), reverse=True)
+            assert (hi + 0.05) / (lo + 0.05) >= 3
+            assert f".avail-{i} " in css

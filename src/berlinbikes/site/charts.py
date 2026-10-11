@@ -1085,6 +1085,12 @@ def footprint_chart(data_dir: str | Path) -> FootprintChart:
 MAP_DEFAULT_HOUR = 8
 #: Weekday (Monday = 0) the map page shows before the visitor picks one.
 MAP_DEFAULT_WEEKDAY = 0
+#: Display bins of the mean bikes at the picked weekday and hour: (lower bound, marker radius).
+#: A bin holds every mean >= its bound and below the next one. The bound 0.05 keeps a mean that
+#: rounds to 0 in the first bin. The map legend and map.js both read this list.
+MAP_BINS = ((0.0, 4), (0.05, 5), (1.0, 7), (3.0, 9))
+#: Marker radius for a station without a value at that hour.
+MAP_NO_DATA_RADIUS = 4
 
 
 @dataclass(frozen=True)
