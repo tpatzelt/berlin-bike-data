@@ -169,3 +169,35 @@ def svg_font_size(html: str, cls: str) -> float:
     els = chart_by_class(html, cls)
     assert els and els[0]["tag"] == "svg", f"no chart svg with class {cls}"
     return float(els[0]["attrs"]["font-size"])
+
+
+def css_token_blocks(css: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Return the (light, dark) custom-property maps parsed from site.css."""
+    root = re.search(r":root\s*{([^}]*)}", css)
+    dark = re.search(r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}", css)
+    assert root and dark
+    pat = re.compile(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})\s*;")
+    light_tokens = dict(pat.findall(root.group(1)))
+    dark_tokens = {**light_tokens, **dict(pat.findall(dark.group(1)))}
+    return light_tokens, dark_tokens
+
+
+def _channels(color: str) -> list[float]:
+    return [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+
+
+def blend(fg: str, bg: str, alpha: float) -> str:
+    """Composite ``fg`` at ``alpha`` over ``bg``; returns #rrggbb."""
+    mixed = [alpha * f + (1 - alpha) * b for f, b in zip(_channels(fg), _channels(bg))]
+    return "#" + "".join(f"{round(c * 255):02x}" for c in mixed)
+
+
+def relative_luminance(color: str) -> float:
+    """WCAG 2.x relative luminance of a #rrggbb colour."""
+    c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in _channels(color)]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
+def contrast_ratio(a: str, b: str) -> float:
+    hi, lo = sorted((relative_luminance(a), relative_luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
