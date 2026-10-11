@@ -13,6 +13,9 @@ from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.profiles import station_profiles
 from berlinbikes.site import build_site
+from berlinbikes.site.charts import CHART_FONT_SIZE, MAP_DEFAULT_HOUR, map_profile_chart
+from berlinbikes.site.profiles import profiles_payload
+from tests.helpers.svg import assert_axes_conventions, chart_elements
 from tests.synthetic import EMPTY_STATION_ID
 
 
@@ -135,7 +138,7 @@ def test_map_pages_are_single_language(map_site):
 def test_map_i18n_json_is_per_language_and_complete(map_site):
     de = json.loads(_collect(map_site / "map.html").i18n_json)
     en = json.loads(_collect(map_site / "map.en.html").i18n_json)
-    assert set(de) == set(en) == {"days", "ortsteil_title", "not_enough_data", "days_collected", "load_error"}
+    assert set(de) == set(en) == {"days", "ortsteil_title", "load_error", "hour", "plot", "axis_x", "axis_y", "headline"}
     assert de["days"] == "({n} Tage)" and en["days"] == "({n} days)"
     assert de["load_error"].startswith("Daten") and en["load_error"].startswith("Could not")
     assert en["ortsteil_title"] == "District {name}"
@@ -169,3 +172,95 @@ def test_legal_pages_are_one_language_each_with_operator_block(map_site):
     ds_en = (map_site / "datenschutz.en.html").read_text()
     assert "Ihre Rechte" in ds_de and "Ihre Rechte" not in ds_en
     assert "No cookies, no analytics" in ds_en and "No cookies, no analytics" not in ds_de
+
+
+class _Options(HTMLParser):
+    """Option values per <select id>, the selected one, plus the profile table's body rows."""
+
+    def __init__(self):
+        super().__init__()
+        self.select = None
+        self.options: dict[str, list[tuple[str, bool]]] = {}
+        self.rows: list[list[str]] = []
+        self._in_tbody = False
+        self._cells: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "select":
+            self.select = a["id"]
+            self.options[self.select] = []
+        elif tag == "option" and self.select:
+            self.options[self.select].append((a.get("value", ""), "selected" in a))
+        elif tag == "tbody":
+            self._in_tbody = True
+        elif tag == "tr" and self._in_tbody:
+            self._cells = []
+
+    def handle_endtag(self, tag):
+        if tag == "select":
+            self.select = None
+        elif tag == "tbody":
+            self._in_tbody = False
+        elif tag == "tr" and self._cells is not None:
+            self.rows.append(self._cells)
+            self._cells = None
+
+    def handle_data(self, data):
+        if self._cells is not None and data.strip():
+            self._cells.append(data.strip())
+
+
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_map_page_without_js_has_options_curve_and_table(map_site, synthetic_data_dir, page):
+    html = (map_site / page).read_text()
+    payload = profiles_payload(synthetic_data_dir)
+    parsed = _Options()
+    parsed.feed(html)
+    stations = parsed.options["pick-station"]
+    assert [v for v, _ in stations[1:]] == [s["id"] for s in payload["stations"]]
+    assert [v for v, sel in stations if sel] == [payload["stations"][0]["id"]]
+    assert [v for v, _ in parsed.options["pick-ortsteil"][1:]] == [o["name"] for o in payload["ortsteile"]]
+    assert len(parsed.rows) == 24 and all(len(r) == 2 for r in parsed.rows)
+    curve = payload["stations"][0]["curve"][0]
+    assert [r[1] for r in parsed.rows] == ["–" if v is None else str(v) for v in curve]
+    els = assert_axes_conventions(html)
+    assert any(e["tag"] == "polyline" for e in els)
+    figure = html[html.index('<svg id="profile-chart"') :]
+    assert chart_elements(figure)[0]["attrs"]["id"] == "profile-chart"
+    assert f"{MAP_DEFAULT_HOUR}:00" in next(e["text"] for e in els if e["tag"] == "text" and "headline" in e["groups"])
+
+
+def test_map_profile_chart_marks_the_hour_on_g2_axes():
+    curve = [[float(h) for h in range(24)] for _ in range(7)]
+    chart = map_profile_chart(curve, weekday=2, hour=10)
+    assert chart.axes.y_min == 0 and chart.axes.y_max >= 23
+    assert chart.headline.hour == 10 and chart.headline.value == 10.0
+    assert len(chart.points.split()) == 24
+    gappy = [[None] * 24 for _ in range(7)]
+    gappy[0][3] = 4.0
+    chart = map_profile_chart(gappy)
+    assert chart.headline is None and len(chart.points.split()) == 1
+    assert CHART_FONT_SIZE == chart.axes.font_size
+
+
+def test_map_page_without_data_shows_not_enough_data(tmp_path):
+    (tmp_path / "data").mkdir()
+    build_site(tmp_path / "data", tmp_path / "site")
+    html = (tmp_path / "site" / "map.html").read_text()
+    assert 'class="not-enough-data"' in html and "<progress" in html
+    assert 'id="profile-chart"' not in html
+    parsed = _Options()
+    parsed.feed(html)
+    assert parsed.options["pick-station"] == [("", False)] and parsed.rows == []
+
+
+def test_map_css_places_map_and_profile_side_by_side_on_wide_screens():
+    css = (Path(__file__).parent.parent / "src/berlinbikes/site/static/site.css").read_text()
+    assert re.search(r"@media \(min-width: [\d.]+rem\)\s*\{\s*\.map-layout\s*\{[^}]*grid-template-columns: repeat\(2", css)
+    assert re.search(r"\.map-layout \{[^}]*grid-template-columns: minmax\(0, 1fr\)", css)
+
+
+def test_map_js_replaces_prefilled_options():
+    js = (Path(__file__).parent.parent / "src/berlinbikes/site/static/map.js").read_text()
+    assert "fillSelect(" in js and "select.remove(1)" in js
