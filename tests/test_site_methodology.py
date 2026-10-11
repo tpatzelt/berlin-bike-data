@@ -140,3 +140,32 @@ def test_mentions_proportional_bezirk_flow_inference(either_page):
     lowered = either_page.lower()
     assert "bezirk" in lowered
     assert "proportional" in lowered
+
+
+def test_page_has_exactly_one_h1_before_the_h2(either_page):
+    assert either_page.count("<h1>") == 1
+    assert either_page.index("<h1>") < either_page.index("<h2>")
+
+
+def test_first_paragraph_is_the_shared_lead(either_page):
+    assert either_page.index('<p class="lead-text">') == either_page.index("<p")
+
+
+def test_sources_table_carries_the_class(either_page):
+    assert either_page.count('<table class="sources-table">') == 1
+
+
+def _css_rule(css: str, selector: str) -> str:
+    start = css.index(selector)
+    return css[start : css.index("}", start)]
+
+
+def test_sources_table_css_left_aligns_and_wraps(site_dir):
+    css = (site_dir / "static" / "site.css").read_text() if (site_dir / "static").exists() else None
+    if css is None:
+        css = next(site_dir.rglob("site.css")).read_text()
+    rule = _css_rule(css, ".sources-table th, .sources-table td")
+    assert "text-align: left" in rule
+    assert "overflow-wrap: anywhere" in rule
+    assert "border-bottom" in _css_rule(css, ".sources-table thead th")
+    assert "text-align: right" in _css_rule(css, "th, td {")

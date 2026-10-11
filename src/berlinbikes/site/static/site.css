@@ -182,6 +182,10 @@ main :is(p, h2, h3, ul, ol, details, form) { max-width: 68ch; }
 
 main > table { display: block; overflow-x: auto; max-width: 100%; width: fit-content; }
 
+.sources-table th, .sources-table td { text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.sources-table thead th { border-bottom: 2px solid var(--border); }
+.sources-table .source-url { overflow-wrap: anywhere; word-break: break-all; }
+
 details { overflow-x: auto; }
 
 header, main, footer { max-width: 64rem; margin-inline: auto; }
