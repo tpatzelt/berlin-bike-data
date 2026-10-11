@@ -21,9 +21,12 @@ class _PageParser(HTMLParser):
         self.html_attrs: dict[str, str | None] = {}
         self.meta: list[dict[str, str | None]] = []
         self.hrefs: list[str] = []
+        self.ids: set[str] = set()
 
     def handle_starttag(self, tag, attrs):
         attr_dict = dict(attrs)
+        if attr_dict.get("id"):
+            self.ids.add(attr_dict["id"])
         if tag == "html":
             self.html_attrs = attr_dict
         elif tag == "meta":
@@ -97,11 +100,25 @@ def test_pages_have_viewport_meta_and_lang(empty_site, page):
 def test_footer_links_resolve_to_generated_files(empty_site, page, lang):
     name = page if lang == "de" else page.replace(".html", ".en.html")
     parsed = _parse((empty_site / name).read_text())
-    local_hrefs = [href for href in parsed.hrefs if not href.startswith(("http", "mailto:"))]
+    local_hrefs = [
+        href for href in parsed.hrefs if not href.startswith(("http", "mailto:", "#"))
+    ]
     expected = {p if lang == "de" else p.replace(".html", ".en.html") for p in PAGES}
     assert set(local_hrefs) >= expected
     for href in local_hrefs:
         assert (empty_site / href).exists(), href
+
+
+@pytest.mark.parametrize("page", PAGES)
+@pytest.mark.parametrize("lang", ("de", "en"))
+def test_in_page_anchors_match_an_element_id(empty_site, page, lang):
+    name = page if lang == "de" else page.replace(".html", ".en.html")
+    parsed = _parse((empty_site / name).read_text())
+    anchors = [href[1:] for href in parsed.hrefs if href.startswith("#") and len(href) > 1]
+    for anchor in anchors:
+        assert anchor in parsed.ids, anchor
+    if page == "index.html":
+        assert anchors, "article page must carry contents/self-link anchors"
 
 
 def test_empty_data_dir_shows_not_enough_data_state(empty_site):

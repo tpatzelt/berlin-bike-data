@@ -171,3 +171,10 @@ header, main, footer { max-width: 64rem; margin-inline: auto; }
 .map-credit { font-size: var(--step--1); color: var(--muted); }
 
 svg.chart .series-label { fill: var(--fg); paint-order: stroke; stroke: var(--bg); stroke-width: 4; }
+
+.lead .callouts { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-3); max-width: none; }
+.lead .callouts li { background: var(--surface); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); flex: 1 1 10rem; max-width: 16rem; }
+.callout-number { display: block; font-size: var(--step-3); font-weight: 700; line-height: 1.1; }
+.callout-label { font-size: var(--step--1); color: var(--muted); }
+.toc ul { padding-left: var(--space-4); }
+h2 .anchor { font-size: 0.7em; margin-left: var(--space-2); text-decoration: none; color: var(--muted); }
