@@ -161,11 +161,25 @@ def _css_rule(css: str, selector: str) -> str:
 
 
 def test_sources_table_css_left_aligns_and_wraps(site_dir):
-    css = (site_dir / "static" / "site.css").read_text() if (site_dir / "static").exists() else None
-    if css is None:
-        css = next(site_dir.rglob("site.css")).read_text()
+    paths = list(site_dir.rglob("site.css"))
+    assert paths
+    css = paths[0].read_text()
     rule = _css_rule(css, ".sources-table th, .sources-table td")
     assert "text-align: left" in rule
-    assert "overflow-wrap: anywhere" in rule
+    assert "hyphens: auto" in rule
+    assert "overflow-wrap: break-word" in rule
+    assert "anywhere" not in rule
+    url_rule = _css_rule(css, ".sources-table .source-url")
+    assert "overflow-wrap: anywhere" in url_rule
+    assert "word-break: break-all" in url_rule
     assert "border-bottom" in _css_rule(css, ".sources-table thead th")
     assert "text-align: right" in _css_rule(css, "th, td {")
+
+
+def test_lead_text_rule_uses_type_and_space_tokens(site_dir):
+    paths = list(site_dir.rglob("site.css"))
+    assert paths
+    rule = _css_rule(paths[0].read_text(), ".lead-text {")
+    assert "font-size: var(--step-" in rule
+    assert "var(--space-" in rule
+    assert "line-height" in rule

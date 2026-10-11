@@ -182,9 +182,11 @@ main :is(p, h2, h3, ul, ol, details, form) { max-width: 68ch; }
 
 main > table { display: block; overflow-x: auto; max-width: 100%; width: fit-content; }
 
-.sources-table th, .sources-table td { text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.sources-table th, .sources-table td { text-align: left; vertical-align: top; hyphens: auto; overflow-wrap: break-word; }
 .sources-table thead th { border-bottom: 2px solid var(--border); }
 .sources-table .source-url { overflow-wrap: anywhere; word-break: break-all; }
+
+.lead-text { font-size: var(--step-1); line-height: 1.5; margin-block: var(--space-4); }
 
 details { overflow-x: auto; }
 
