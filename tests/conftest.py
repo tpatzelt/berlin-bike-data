@@ -39,3 +39,24 @@ def synthetic_data_dir(tmp_path_factory):
     data_dir = tmp_path_factory.mktemp("synthetic")
     build_dataset(data_dir, start_date=date(2026, 10, 12), days=28)
     return data_dir
+
+
+@pytest.fixture(scope="session")
+def built_empty_site(tmp_path_factory):
+    """Site built once from an empty data dir; tests must treat it as read-only."""
+    from berlinbikes.site import build_site
+
+    data_dir = tmp_path_factory.mktemp("shared_empty_data")
+    site_dir = tmp_path_factory.mktemp("shared_empty_site")
+    build_site(data_dir, site_dir)
+    return site_dir
+
+
+@pytest.fixture(scope="session")
+def built_synthetic_site(tmp_path_factory, synthetic_data_dir):
+    """Site built once from the synthetic dataset (no operator); read-only."""
+    from berlinbikes.site import build_site
+
+    site_dir = tmp_path_factory.mktemp("shared_synthetic_site")
+    build_site(synthetic_data_dir, site_dir)
+    return site_dir

@@ -15,7 +15,7 @@ import pytest
 
 from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.weather_effect import COLD_C_THRESHOLD, RAIN_MM_THRESHOLD
-from berlinbikes.site import PAGES, build_site
+from berlinbikes.site import PAGES
 from berlinbikes.site.sources import DATA_SOURCES
 
 
@@ -43,12 +43,8 @@ def _parse(html_text: str) -> _PageParser:
 
 
 @pytest.fixture
-def site_dir(tmp_path):
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    out = tmp_path / "site"
-    build_site(data_dir, out)
-    return out
+def site_dir(built_empty_site):
+    return built_empty_site
 
 
 @pytest.fixture
@@ -100,11 +96,7 @@ def test_footer_links_to_methodology_page(either_page):
     assert "methodology.html" in parsed.hrefs
 
 
-def test_footer_links_resolve_to_other_generated_pages(tmp_path):
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    site_dir = tmp_path / "site"
-    build_site(data_dir, site_dir)
+def test_footer_links_resolve_to_other_generated_pages(site_dir):
     parsed = _parse((site_dir / "methodology.html").read_text())
     local_hrefs = [href for href in parsed.hrefs if not href.startswith("http")]
     assert set(local_hrefs) >= set(PAGES)

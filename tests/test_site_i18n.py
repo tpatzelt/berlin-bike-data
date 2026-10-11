@@ -141,10 +141,8 @@ class _ArticleLangs(HTMLParser):
 
 
 @pytest.fixture(scope="module")
-def synthetic_site_dir(tmp_path_factory, synthetic_data_dir):
-    out = tmp_path_factory.mktemp("synthetic_site")
-    build_site(synthetic_data_dir, out)
-    return out
+def synthetic_site_dir(built_synthetic_site):
+    return built_synthetic_site
 
 
 @pytest.mark.parametrize("which", ("empty", "synthetic"))
@@ -239,14 +237,8 @@ def _differing_values() -> dict[str, list[str]]:
 
 
 @pytest.fixture(scope="module")
-def sweep_sites(tmp_path_factory, synthetic_data_dir):
-    empty_data = tmp_path_factory.mktemp("empty_data")
-    roots = {}
-    for which, data in (("empty", empty_data), ("synthetic", synthetic_data_dir)):
-        out = tmp_path_factory.mktemp(f"sweep_{which}")
-        build_site(data, out)
-        roots[which] = out
-    return roots
+def sweep_sites(built_empty_site, built_synthetic_site):
+    return {"empty": built_empty_site, "synthetic": built_synthetic_site}
 
 
 @pytest.mark.parametrize("which", ("empty", "synthetic"))

@@ -60,19 +60,13 @@ def _git_status() -> str:
 
 
 @pytest.fixture
-def empty_site(tmp_path):
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    site_dir = tmp_path / "site"
-    build_site(data_dir, site_dir)
-    return site_dir
+def empty_site(built_empty_site):
+    return built_empty_site
 
 
 @pytest.fixture
-def synthetic_site(synthetic_data_dir, tmp_path):
-    site_dir = tmp_path / "site_full"
-    build_site(synthetic_data_dir, site_dir)
-    return site_dir
+def synthetic_site(built_synthetic_site):
+    return built_synthetic_site
 
 
 def test_build_site_writes_every_page_and_css(empty_site):
@@ -235,13 +229,8 @@ class _HeaderParser(HTMLParser):
 
 
 @pytest.fixture(scope="module")
-def layout_site(tmp_path_factory):
-    from berlinbikes.site import build_site as _build
-
-    data_dir = tmp_path_factory.mktemp("layout_data")
-    site_dir = tmp_path_factory.mktemp("layout_site")
-    _build(data_dir, site_dir)
-    return site_dir
+def layout_site(built_empty_site):
+    return built_empty_site
 
 
 @pytest.mark.parametrize("page", PAGES)
