@@ -11,6 +11,28 @@
   --series-5: #e87ba4;
   --series-6: #008300;
   --series-7: #4a3aa7;
+  --surface: #f5f5f5;
+  --border: #b5b5b5;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.5rem;
+
+  --step--1: 0.85rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.5rem;
+  --step-3: 1.875rem;
+  --step-4: 2.25rem;
+
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -27,6 +49,8 @@
     --series-5: #d55181;
     --series-6: #008300;
     --series-7: #9085e9;
+    --surface: #1e1e1e;
+    --border: #555555;
   }
 }
 
@@ -36,27 +60,28 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-body);
+  font-size: var(--step-0);
   line-height: 1.5;
 }
 
-header, main, footer { padding: 1rem; width: 100%; }
+header, main, footer { padding: var(--space-4); width: 100%; }
 
 a { color: var(--accent); }
 
-.not-enough-data { border: 1px solid var(--muted); padding: 1rem; }
+.not-enough-data { border: 1px solid var(--border); padding: var(--space-4); }
 
-footer nav a { margin-right: 1rem; }
+footer nav a { margin-right: var(--space-4); }
 
-figure { margin: 1rem 0; }
+figure { margin: var(--space-4) 0; }
 
 svg.chart { display: block; width: 100%; height: auto; }
 
-.chart-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0; }
+.chart-legend { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-3); padding: 0; }
 
-.chart-legend li { display: flex; align-items: center; gap: 0.35rem; }
+.chart-legend li { display: flex; align-items: center; gap: var(--space-1); }
 
-.chart-legend .swatch { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 2px; }
+.chart-legend .swatch { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: var(--radius-sm); }
 
 svg.chart .grid { stroke: var(--grid); stroke-width: 1; }
 
@@ -80,20 +105,20 @@ svg.chart .pattern-line { stroke: var(--bg); stroke-width: 2; }
 
 table { border-collapse: collapse; }
 
-th, td { padding: 0.15rem 0.4rem; text-align: right; }
+th, td { padding: var(--space-1) var(--space-2); text-align: right; }
 
 @media (min-width: 600px) {
   header, main, footer { max-width: 600px; margin: 0 auto; }
 }
 
-.map { height: 55vh; min-height: 16rem; width: 100%; margin: 1rem 0; border: 1px solid var(--muted); }
+.map { height: 55vh; min-height: 16rem; width: 100%; margin: var(--space-4) 0; border: 1px solid var(--border); }
 
-.map-controls { display: flex; flex-wrap: wrap; gap: 0 1.5rem; }
+.map-controls { display: flex; flex-wrap: wrap; gap: 0 var(--space-5); }
 
 .map-controls label { display: block; font-weight: 600; }
 
 .map-controls select { max-width: 100%; font: inherit; }
 
-.map-credit { font-size: 0.85rem; color: var(--muted); }
+.map-credit { font-size: var(--step--1); color: var(--muted); }
 
 svg.chart .series-label { fill: var(--fg); paint-order: stroke; stroke: var(--bg); stroke-width: 4; }
