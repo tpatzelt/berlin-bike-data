@@ -756,6 +756,32 @@ def _weather_values(rows) -> tuple[dict[str, dict[int, float]], int]:
     return by_bucket, excluded_n_hours
 
 
+def text_box(x: float, y: float, chars: int, anchor: str) -> tuple[float, float, float, float]:
+    """Estimated (left, top, right, bottom) of one text line with baseline ``y``."""
+    width = chars * HEADLINE_CHAR_WIDTH * CHART_FONT_SIZE
+    left = {"start": x, "end": x - width, "middle": x - width / 2}[anchor]
+    return left, y - CHART_FONT_SIZE, left + width, y
+
+
+def boxes_intersect(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def _clear_of_series_labels(headline: Headline, points: list[Headline], buckets: list[WeatherBucketSeries]) -> Headline:
+    """Move the headline label above the highest 8:00 marker when a series label would overprint it."""
+    series_boxes = [text_box(b.label_x, b.label_y, len(b.label_de), "end") for b in buckets]
+    series_boxes += [text_box(b.label_x, b.label_y, len(b.label_en), "end") for b in buckets]
+
+    def hit(h: Headline) -> bool:
+        box = text_box(h.label_x, h.label_y, WEATHER_HEADLINE_CHARS, h.anchor)
+        return any(boxes_intersect(box, other) for other in series_boxes)
+
+    if not hit(headline):
+        return headline
+    above = replace(headline, label_y=min(p.y for p in points) - 12)
+    return above if not hit(above) else headline
+
+
 def _weather_kind_chart(kind: str, by_bucket: dict[str, dict[int, float]], excluded_n_hours: int, axes: Axes) -> WeatherKindChart:
     active_bucket, other_bucket = _WEATHER_KIND_BUCKETS[kind]
 
@@ -805,12 +831,16 @@ def _weather_kind_chart(kind: str, by_bucket: dict[str, dict[int, float]], exclu
         label_y = y - 8 if above else y + CHART_FONT_SIZE + 2
         label_y = max(axes.top + CHART_FONT_SIZE * 0.8, min(label_y, axes.bottom - 4))
         labelled.append(replace(series, label_x=x_of(last), label_y=label_y))
-    # Clamping to the plot box can push the two labels together; keep them a line apart.
+    # Clamping to the plot box can push the two labels together; keep them a line apart,
+    # moving the lower one down and only moving the upper one up when the plot bottom is in the way.
     if len(labelled) == 2:
         top, bottom = sorted(labelled, key=lambda s: (s.label_y, s.bucket != active_bucket))
         if bottom.label_y - top.label_y < CHART_FONT_SIZE:
-            top_y = bottom.label_y - CHART_FONT_SIZE
-            labelled = [replace(s, label_y=top_y) if s is top else s for s in labelled]
+            bottom_y = min(top.label_y + CHART_FONT_SIZE, axes.bottom - 4)
+            top_y = min(top.label_y, bottom_y - CHART_FONT_SIZE)
+            labelled = [
+                replace(s, label_y=top_y) if s is top else replace(s, label_y=bottom_y) for s in labelled
+            ]
     buckets = [next(s for s in labelled if s.bucket == b.bucket) for b in buckets]
 
     # 8:00 markers from the plotted values only; the label sits at the lowest one.
@@ -823,6 +853,10 @@ def _weather_kind_chart(kind: str, by_bucket: dict[str, dict[int, float]], exclu
         _make_headline(axes, value, WEATHER_HEADLINE_HOUR, chars=WEATHER_HEADLINE_CHARS) for value, _s in at_8
     ]
     headline = min(headline_points, key=lambda p: p.value) if headline_points else None
+    if headline is not None:
+        moved = _clear_of_series_labels(headline, headline_points, buckets)
+        headline_points = [moved if p is headline else p for p in headline_points]
+        headline = moved
 
     return WeatherKindChart(
         kind=kind,

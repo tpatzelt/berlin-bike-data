@@ -21,8 +21,15 @@ import pytest
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.weather_effect import COLD_C_THRESHOLD, RAIN_MM_THRESHOLD, weather_effect
 from berlinbikes.site import build_site
-from berlinbikes.site.charts import CHART_FONT_SIZE
-from tests.helpers.svg import assert_axes_conventions, polyline_dasharrays
+from berlinbikes.site.charts import (
+    CHART_FONT_SIZE,
+    WEATHER_HEADLINE_CHARS,
+    _weather_kind_chart,
+    boxes_intersect,
+    build_axes,
+    text_box,
+)
+from tests.helpers.svg import assert_axes_conventions, polyline_dasharrays, root_font_size
 from tests.test_metric_weather import _write_weather_day
 from tests.test_site_article import _ancestors, _find_all, _parse, _preorder, _text
 
@@ -255,7 +262,38 @@ def test_weather_charts_have_shared_axes_dashes_and_labels(synthetic_data_dir, t
         assert _number(label.split("·")[0]) == pytest.approx(round(at_8[active], 1))
         assert _number(label.split("·")[1]) == pytest.approx(round(at_8[other], 1))
         assert len([e for e in els if e["tag"] == "circle" and "headline" in e["groups"]]) == 2
+        # no series label overprints the headline label
+        head = [e for e in els if e["tag"] == "text" and "headline" in e["groups"]][0]
+        head_box = text_box(float(head["attrs"]["x"]), float(head["attrs"]["y"]), WEATHER_HEADLINE_CHARS, head["attrs"]["text-anchor"])
+        for t in texts:
+            box = text_box(float(t["attrs"]["x"]), float(t["attrs"]["y"]), len(t["text"]), t["attrs"]["text-anchor"])
+            assert not boxes_intersect(box, head_box), (t["text"], box, head_box)
+        assert root_font_size(svg) == CHART_FONT_SIZE
     assert ticks[0] == ticks[1], "both small multiples share one y scale"
+
+
+def test_series_labels_near_top_edge_stay_apart_inside_the_plot():
+    axes = build_axes(0, 20)
+    by_bucket = {"rainy": {h: 20.0 for h in range(24)}, "dry": {h: 19.9 for h in range(24)}}
+    chart = _weather_kind_chart("rain", by_bucket, 0, axes)
+    a, b = chart.buckets
+    assert abs(a.label_y - b.label_y) >= CHART_FONT_SIZE
+    for s in (a, b):
+        assert s.label_y >= axes.top + CHART_FONT_SIZE * 0.8  # glyphs stay inside the plot box
+        assert s.label_y <= axes.bottom
+    boxes = [text_box(s.label_x, s.label_y, len(s.label_de), "end") for s in (a, b)]
+    assert not boxes_intersect(*boxes)
+
+
+def test_headline_moves_above_markers_when_a_series_label_would_overprint_it():
+    axes = build_axes(0, 20)
+    by_bucket = {"rainy": {h: 10.0 for h in range(24)}, "dry": {h: 12.0 for h in range(24)}}
+    chart = _weather_kind_chart("rain", by_bucket, 0, axes)
+    head = chart.headline
+    head_box = text_box(head.label_x, head.label_y, WEATHER_HEADLINE_CHARS, head.anchor)
+    for s in chart.buckets:
+        for text in (s.label_de, s.label_en):
+            assert not boxes_intersect(text_box(s.label_x, s.label_y, len(text), "end"), head_box)
 
 
 def test_missing_bucket_marks_only_the_present_one():

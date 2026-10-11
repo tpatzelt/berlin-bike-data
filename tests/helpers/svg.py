@@ -93,7 +93,7 @@ def assert_distinct_dasharrays(els: list[dict], n: int) -> None:
 
 
 def root_font_size(html: str) -> float:
-    m = re.search(r'<svg[^>]*class="chart"[^>]*font-size="([\d.]+)"', html)
+    m = re.search(r'<svg[^>]*class="(?:[^"]* )?chart(?: [^"]*)?"[^>]*font-size="([\d.]+)"', html)
     assert m, "root svg font-size missing"
     return float(m.group(1))
 
