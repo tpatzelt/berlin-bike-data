@@ -89,7 +89,11 @@ _AXES_PAD_BOTTOM = 62
 _AXES_VIEW_HEIGHT = 300
 
 
-def nice_ticks(lo: float, hi: float, target: int = 5) -> list[float]:
+#: Approximate number of y-axis intervals; map.js reads it to build the same ticks.
+Y_TICK_TARGET = 5
+
+
+def nice_ticks(lo: float, hi: float, target: int = Y_TICK_TARGET) -> list[float]:
     """Round tick values (step 1/2/5 x 10^n) covering ``[lo, hi]``; first <= lo, last >= hi."""
     if hi <= lo:
         hi = lo + 1.0

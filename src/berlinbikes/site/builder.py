@@ -20,6 +20,7 @@ from berlinbikes.site.charts import (
     footprint_chart,
     MAP_DEFAULT_HOUR,
     map_profile_chart,
+    Y_TICK_TARGET,
     shortage_chart,
     weather_effect_chart,
 )
@@ -65,6 +66,7 @@ def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, s
         "map_payload": map_payload,
         "map_default": map_default,
         "map_default_hour": MAP_DEFAULT_HOUR,
+        "map_y_tick_target": Y_TICK_TARGET,
         "map_chart": map_profile_chart(map_default["curve"]) if map_default else None,
         "availability_chart": availability_chart(Path(data_dir)),
         "bezirk_availability_chart": bezirk_availability_chart(Path(data_dir)),

@@ -203,6 +203,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "map.aria": {"de": "Karte der Stationen", "en": "Map of stations"},
     "map.label.station": {"de": "Station", "en": "Station"},
     "map.label.ortsteil": {"de": "Ortsteil", "en": "District"},
+    "map.label.search": {"de": "Station suchen (Name eintippen)", "en": "Search for a station (type its name)"},
+    "map.search.placeholder": {"de": "Stationsname", "en": "Station name"},
+    "map.label.hour": {"de": "Uhrzeit", "en": "Hour"},
+    "map.ortsteil_button": {"de": "Ganzes Ortsteil zeigen", "en": "Show the whole Ortsteil"},
     "map.label.weekday": {"de": "Wochentag", "en": "Weekday"},
     "map.chart.aria": {"de": "Verfügbare Räder je Stunde", "en": "Bikes available by hour"},
     "map.caption": {
