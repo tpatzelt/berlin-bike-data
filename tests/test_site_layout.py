@@ -202,3 +202,75 @@ def test_no_color_literal_outside_root_blocks(empty_site):
     assert "{" in rest  # the rules are still there
     assert not _COLOR_LITERAL.findall(rest)
     assert not _NAMED_COLORS.findall(rest)
+
+
+class _HeaderParser(HTMLParser):
+    """Collect the links inside <header><nav> and the header's language switch."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_header = self.in_nav = False
+        self.nav_hrefs: list[str] = []
+        self.header_hrefs: list[str] = []
+        self.has_nav = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "header":
+            self.in_header = True
+        elif tag == "nav" and self.in_header:
+            self.in_nav = self.has_nav = True
+        elif tag == "a" and self.in_header:
+            href = dict(attrs).get("href", "")
+            self.header_hrefs.append(href)
+            if self.in_nav:
+                self.nav_hrefs.append(href)
+
+    def handle_endtag(self, tag):
+        if tag == "header":
+            self.in_header = False
+        elif tag == "nav":
+            self.in_nav = False
+
+
+@pytest.fixture(scope="module")
+def layout_site(tmp_path_factory):
+    from berlinbikes.site import build_site as _build
+
+    data_dir = tmp_path_factory.mktemp("layout_data")
+    site_dir = tmp_path_factory.mktemp("layout_site")
+    _build(data_dir, site_dir)
+    return site_dir
+
+
+@pytest.mark.parametrize("page", PAGES)
+@pytest.mark.parametrize("lang", ("de", "en"))
+def test_header_has_nav_in_page_language_and_language_switch(layout_site, page, lang):
+    def name(p, lg):
+        return p if lg == "de" else p.replace(".html", ".en.html")
+
+    path = layout_site / name(page, lang)
+    assert path.exists()
+    parser = _HeaderParser()
+    parser.feed(path.read_text())
+    assert parser.has_nav
+    assert set(parser.nav_hrefs) == {name(p, lang) for p in ("index.html", "map.html", "methodology.html")}
+    other = "en" if lang == "de" else "de"
+    assert name(page, other) in parser.header_hrefs
+    assert name(page, other) not in parser.nav_hrefs
+
+
+def test_stylesheet_sets_ch_based_prose_measure(layout_site):
+    css_text = (layout_site / "site.css").read_text()
+    match = re.search(r"main\s*:is\(([^)]*)\)\s*{([^}]*)}", css_text)
+    assert match
+    selectors = {s.strip() for s in match.group(1).split(",")}
+    assert {"p", "h2", "ul", "details"} <= selectors
+    width = re.search(r"max-width:\s*(\d+)ch", match.group(2))
+    assert width and 60 <= int(width.group(1)) <= 75
+    assert not re.search(r"max-width:\s*\d+px", css_text)
+
+
+def test_header_is_styled_and_footer_is_quiet(layout_site):
+    css_text = (layout_site / "site.css").read_text()
+    assert re.search(r"\.site-header\s*{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap", css_text)
+    assert re.search(r"footer\s*{[^}]*color:\s*var\(--muted\)", css_text)
