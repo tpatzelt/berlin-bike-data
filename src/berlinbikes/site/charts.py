@@ -921,8 +921,12 @@ def footprint_chart(data_dir: str | Path) -> FootprintChart:
     pitch = bar_width + _FOOT_BAR_GAP
     step = max(1, math.ceil(_FOOT_TICK_SPACING / pitch)) if pitch else 1
     dates = [row[0] for row in rows]
+    # Ticks count back from the latest day; one whose label would reach the y tick labels is dropped.
+    half_label = 5 * HEADLINE_CHAR_WIDTH * CHART_FONT_SIZE / 2
     x_ticks = [
-        Tick(base_axes.left + i * pitch + bar_width / 2, dates[i].strftime("%m-%d")) for i in range(0, n, step)
+        Tick(base_axes.left + i * pitch + bar_width / 2, dates[i].strftime("%m-%d"))
+        for i in range(n - 1, -1, -step)[::-1]
+        if base_axes.left + i * pitch + bar_width / 2 - half_label >= base_axes.left
     ]
     axes = replace(base_axes, right=right, x_ticks=x_ticks, x_title_x=(base_axes.left + right) / 2)
 

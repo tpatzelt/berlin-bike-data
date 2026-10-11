@@ -67,7 +67,9 @@
 <text class="value" x="{{ "%.1f"|format(bar.value_x) }}" y="{{ "%.1f"|format(bar.label_y) }}">{{ "%.1f"|format(bar.minutes_per_day) }}</text>
 {% endif %}
 {% endfor %}
+{% if shortage_chart.headline %}
 {{ chart.headline(shortage_chart.headline, t("shortage.headline", value="%.1f"|format(shortage_chart.headline.value))) }}
+{% endif %}
 </svg>
 <figcaption>{{ t("shortage.caption", full_days=shortage_chart.full_days) }}</figcaption>
 </figure>

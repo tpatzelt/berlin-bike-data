@@ -183,3 +183,20 @@ def test_shortage_text_is_legible_and_never_overlaps(synthetic_data_dir, tmp_pat
     from tests.helpers.svg import text_boxes
 
     assert_no_overlaps_and_inside(text_boxes(els, CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH), width, height)
+
+
+def test_build_site_survives_an_ok_result_with_no_stations(monkeypatch, synthetic_data_dir, tmp_path):
+    def _fake(con):
+        return MetricResult(
+            name="morning_shortage",
+            full_days=17,
+            status="ok",
+            message=None,
+            rows={"stations": [], "ortsteile": [], "share_empty_at_0800": None},
+        )
+
+    monkeypatch.setattr(charts_module, "morning_shortage", _fake)
+    build_site(synthetic_data_dir, tmp_path / "site")
+    assert "headline" not in " ".join(
+        " ".join(e["classes"] + e["groups"]) for e in _bars_svg((tmp_path / "site" / "index.html").read_text())
+    )
