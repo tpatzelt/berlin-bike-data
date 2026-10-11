@@ -26,7 +26,6 @@ from berlinbikes.site.charts import (
     shortage_chart,
     weather_effect_chart,
 )
-from berlinbikes.config import site_base_url
 from berlinbikes.site.i18n import LANGS, t
 from berlinbikes.site.profiles import profiles_payload, write_profiles_json
 from berlinbikes.site.sources import DATA_SOURCES
@@ -54,16 +53,16 @@ def page_url(page: str, lang: str) -> str:
 DEFAULT_OPERATOR = {"name": "[NAME]", "address": "[ANSCHRIFT]", "email": "[E-MAIL]"}
 
 
-def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, str] | None = None, base_url: str | None = None) -> list[Path]:
+def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, str] | None = None, base_url: str = "") -> list[Path]:
     """Render ``PAGES`` and copy static assets into ``site_dir``.
 
-    ``base_url`` (default: ``BIKES_SITE_BASE_URL``) makes og:url and og:image
+    ``base_url`` (default: empty; the environment is never consulted) makes og:url and og:image
     absolute; when empty they stay relative.
 
     Writes only under ``site_dir``; never touches the repository.
     """
     site_dir = Path(site_dir)
-    base_url = (site_base_url() if base_url is None else base_url).rstrip("/")
+    base_url = base_url.rstrip("/")
     site_dir.mkdir(parents=True, exist_ok=True)
 
     env = Environment(
