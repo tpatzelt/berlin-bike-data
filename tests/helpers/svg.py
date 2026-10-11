@@ -96,3 +96,40 @@ def root_font_size(html: str) -> float:
     m = re.search(r'<svg[^>]*class="chart"[^>]*font-size="([\d.]+)"', html)
     assert m, "root svg font-size missing"
     return float(m.group(1))
+
+
+def chart_by_class(html: str, cls: str) -> list[dict]:
+    """Elements of the ``<svg>`` whose class list contains ``chart`` and ``cls``."""
+    parser = _Svg()
+    parser.feed(html)
+    out: list[dict] = []
+    inside = False
+    for el in parser.elements:
+        if el["tag"] == "svg":
+            inside = "chart" in el["classes"] and cls in el["classes"]
+        if inside:
+            out.append(el)
+    return out
+
+
+def text_boxes(els: list[dict], font_size: float, char_width: float) -> list[tuple[str, float, float, float, float]]:
+    """Estimated (text, x0, y0, x1, y1) of every positioned <text>; rotated titles are skipped."""
+    boxes = []
+    for e in els:
+        a = e["attrs"]
+        if e["tag"] != "text" or "x" not in a or "transform" in a:
+            continue
+        w = len(e["text"].strip()) * char_width * font_size
+        x = float(a["x"])
+        x0 = {"end": x - w, "middle": x - w / 2}.get(a.get("text-anchor"), x)
+        y = float(a["y"])
+        boxes.append((e["text"].strip(), x0, y - font_size * 0.8, x0 + w, y + font_size * 0.2))
+    return boxes
+
+
+def assert_no_overlaps_and_inside(boxes, width: float, height: float) -> None:
+    for text, x0, y0, x1, y1 in boxes:
+        assert x0 >= 0 and y0 >= 0 and x1 <= width and y1 <= height, (text, x0, y0, x1, y1)
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1 :]:
+            assert a[3] <= b[1] or b[3] <= a[1] or a[4] <= b[2] or b[4] <= a[2], (a[0], b[0])

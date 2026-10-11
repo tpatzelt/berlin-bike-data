@@ -43,3 +43,23 @@
 {% endfor %}
 </ul>
 {% endmacro %}
+
+{# Value axis along the bottom of a horizontal bar chart: vertical gridlines, ticks, title. #}
+{% macro bar_frame(c, x_title) %}
+<g class="grid-lines">
+{% for tick in c.x_ticks %}
+<line class="grid" x1="{{ "%.1f"|format(tick.pos) }}" x2="{{ "%.1f"|format(tick.pos) }}" y1="{{ c.top }}" y2="{{ c.bottom }}"></line>
+{% endfor %}
+</g>
+<g class="axis axis-x">
+{% for tick in c.x_ticks %}
+<text class="tick" x="{{ "%.1f"|format(tick.pos) }}" y="{{ c.bottom + 20 }}" text-anchor="middle">{{ tick.label }}</text>
+{% endfor %}
+</g>
+<g class="axis axis-y">
+{% for bar in c.bars %}
+<text class="tick" x="{{ bar.label_x }}" y="{{ "%.1f"|format(bar.label_y) }}" text-anchor="end">{{ bar.label }}</text>
+{% endfor %}
+</g>
+<text class="axis-title axis-title-x" x="{{ c.x_title_x }}" y="{{ c.x_title_y }}" text-anchor="middle">{{ x_title }}</text>
+{% endmacro %}

@@ -59,12 +59,15 @@
 {% endif %}
 {% if shortage_chart.status == "ok" %}
 <figure>
-<svg viewBox="{{ shortage_chart.view_box }}" role="img" class="chart bars" aria-label="{{ t("shortage.aria", n=shortage_chart.bars|length) }}">
+<svg viewBox="{{ shortage_chart.view_box }}" role="img" class="chart bars" font-size="{{ shortage_chart.font_size }}" aria-label="{{ t("shortage.aria", n=shortage_chart.bars|length) }}">
+{{ chart.bar_frame(shortage_chart, t("shortage.axis.x")) }}
 {% for bar in shortage_chart.bars %}
-<rect x="{{ bar.bar_x }}" y="{{ bar.bar_y }}" width="{{ bar.bar_width }}" height="{{ bar.bar_height }}" fill="var(--accent)"></rect>
-<text x="{{ bar.bar_x - 4 }}" y="{{ bar.label_y }}" text-anchor="end">{{ bar.station_id }} ({{ bar.ortsteil }})</text>
-<text x="{{ bar.value_x }}" y="{{ bar.label_y }}">{{ "%.1f"|format(bar.minutes_per_day) }}</text>
+<rect x="{{ bar.bar_x }}" y="{{ bar.bar_y }}" width="{{ "%.1f"|format(bar.bar_width) }}" height="{{ bar.bar_height }}" fill="var(--accent)"></rect>
+{% if not bar.is_top %}
+<text class="value" x="{{ "%.1f"|format(bar.value_x) }}" y="{{ "%.1f"|format(bar.label_y) }}">{{ "%.1f"|format(bar.minutes_per_day) }}</text>
+{% endif %}
 {% endfor %}
+{{ chart.headline(shortage_chart.headline, t("shortage.headline", value="%.1f"|format(shortage_chart.headline.value))) }}
 </svg>
 <figcaption>{{ t("shortage.caption", full_days=shortage_chart.full_days) }}</figcaption>
 </figure>
@@ -263,21 +266,31 @@
 {% endif %}
 {% if footprint_chart.status == "ok" %}
 <figure>
-<svg viewBox="{{ footprint_chart.view_box }}" role="img" class="chart footprint"
+<svg viewBox="{{ footprint_chart.view_box }}" role="img" class="chart footprint" font-size="{{ footprint_chart.axes.font_size }}"
      aria-label="{{ t("footprint.aria", full_days=footprint_chart.full_days) }}">
+<defs>
+<pattern id="fp-pedal" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--series-2)"></rect><line class="pattern-line" x1="0" y1="0" x2="0" y2="6"></line></pattern>
+<pattern id="fp-unknown" width="5" height="5" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="var(--series-3)"></rect><circle cx="2.5" cy="2.5" r="1.2" fill="var(--bg)"></circle></pattern>
+</defs>
+{{ chart.axes_frame(footprint_chart.axes, t("footprint.axis.x"), t("footprint.axis.y")) }}
 {% for bar in footprint_chart.bars %}
-<rect x="{{ bar.bar_x }}" y="{{ bar.ebike_y }}" width="{{ bar.bar_width }}" height="{{ bar.ebike_height }}" fill="var(--series-1)"></rect>
-<rect x="{{ bar.bar_x }}" y="{{ bar.pedal_y }}" width="{{ bar.bar_width }}" height="{{ bar.pedal_height }}" fill="var(--series-2)"></rect>
-<rect x="{{ bar.bar_x }}" y="{{ bar.unknown_y }}" width="{{ bar.bar_width }}" height="{{ bar.unknown_height }}" fill="var(--series-3)"></rect>
+<rect class="segment segment-ebike" x="{{ "%.1f"|format(bar.bar_x) }}" y="{{ "%.1f"|format(bar.ebike_y) }}" width="{{ "%.1f"|format(bar.bar_width) }}" height="{{ "%.1f"|format(bar.ebike_height) }}" fill="var(--series-1)"></rect>
+<rect class="segment segment-pedal" x="{{ "%.1f"|format(bar.bar_x) }}" y="{{ "%.1f"|format(bar.pedal_y) }}" width="{{ "%.1f"|format(bar.bar_width) }}" height="{{ "%.1f"|format(bar.pedal_height) }}" fill="url(#fp-pedal)"></rect>
+<rect class="segment segment-unknown" x="{{ "%.1f"|format(bar.bar_x) }}" y="{{ "%.1f"|format(bar.unknown_y) }}" width="{{ "%.1f"|format(bar.bar_width) }}" height="{{ "%.1f"|format(bar.unknown_height) }}" fill="url(#fp-unknown)"></rect>
+<line class="segment-sep" x1="{{ "%.1f"|format(bar.bar_x) }}" x2="{{ "%.1f"|format(bar.bar_x + bar.bar_width) }}" y1="{{ "%.1f"|format(bar.ebike_y) }}" y2="{{ "%.1f"|format(bar.ebike_y) }}"></line>
+<line class="segment-sep" x1="{{ "%.1f"|format(bar.bar_x) }}" x2="{{ "%.1f"|format(bar.bar_x + bar.bar_width) }}" y1="{{ "%.1f"|format(bar.pedal_y) }}" y2="{{ "%.1f"|format(bar.pedal_y) }}"></line>
 {% endfor %}
+<g class="segment-labels">
+{% for lab in footprint_chart.segment_labels %}
+{% set fill = {"ebike": "var(--series-1)", "pedal": "url(#fp-pedal)", "unknown": "url(#fp-unknown)"}[lab.key] %}
+<rect class="swatch-box" x="{{ "%.1f"|format(lab.x) }}" y="{{ "%.1f"|format(lab.y - 11) }}" width="11" height="11" fill="{{ fill }}"></rect>
+<text class="segment-label" x="{{ "%.1f"|format(lab.x + 15) }}" y="{{ "%.1f"|format(lab.y) }}">{{ t("footprint.legend." ~ lab.key) }}</text>
+{% endfor %}
+</g>
+{{ chart.headline(footprint_chart.headline, t("footprint.headline", value="%.0f"|format(footprint_chart.headline.value))) }}
 </svg>
 <figcaption>{{ t("footprint.caption", full_days=footprint_chart.full_days) }}</figcaption>
 </figure>
-<ul class="chart-legend">
-<li><span class="swatch" style="background: var(--series-1)"></span><span>{{ t("footprint.legend.ebike") }}</span></li>
-<li><span class="swatch" style="background: var(--series-2)"></span><span>{{ t("footprint.legend.pedal") }}</span></li>
-<li><span class="swatch" style="background: var(--series-3)"></span><span>{{ t("footprint.legend.unknown") }}</span></li>
-</ul>
 <details>
 <summary>{{ t("common.show_table") }}</summary>
 <table>

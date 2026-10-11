@@ -137,3 +137,58 @@ def test_empty_data_dir_shows_not_enough_data_and_no_footprint_chart(tmp_path):
     root = _parse(html)
     bar_svgs = [svg for svg in _find_all(root, "svg") if "footprint" in (svg.attrs.get("class") or "").split()]
     assert not bar_svgs, "no footprint bar chart should render below the 14-full-day minimum"
+
+
+def _fp(name, tmp_path, data_dir):
+    from tests.helpers.svg import chart_by_class
+
+    build_site(data_dir, tmp_path / "site")
+    return chart_by_class((tmp_path / "site" / name).read_text(), "footprint")
+
+
+def test_footprint_axes_ticks_titles_and_headline(synthetic_data_dir, tmp_path):
+    from berlinbikes.site.charts import footprint_chart
+
+    chart = footprint_chart(synthetic_data_dir)
+    for name, ytitle, unit in (
+        ("index.html", "Räder im System (Anzahl)", "Räder"),
+        ("index.en.html", "Bikes in the system (count)", "bikes"),
+    ):
+        els = _fp(name, tmp_path, synthetic_data_dir)
+        for axis in ("axis-x", "axis-y"):
+            ticks = [e for e in els if e["tag"] == "text" and "tick" in e["classes"] and axis in e["groups"]]
+            assert len(ticks) >= 3
+        assert [e["text"] for e in els if "axis-title-y" in e["classes"]] == [ytitle]
+        assert [e for e in els if e["tag"] == "line" and "grid" in e["classes"]]
+        head = [e["text"] for e in els if e["tag"] == "text" and "headline" in e["groups"]]
+        assert head == [f"{chart.latest_bikes_total:.0f} {unit}"]
+
+
+def test_footprint_date_ticks_are_thinned_and_do_not_overlap(synthetic_data_dir, tmp_path):
+    from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH, footprint_chart
+    from tests.helpers.svg import text_boxes
+
+    chart = footprint_chart(synthetic_data_dir)
+    assert len(chart.bars) >= 14
+    assert len(chart.axes.x_ticks) < len(chart.bars)
+    els = _fp("index.en.html", tmp_path, synthetic_data_dir)
+    xt = [e for e in els if e["tag"] == "text" and "tick" in e["classes"] and "axis-x" in e["groups"]]
+    boxes = text_boxes(xt, CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH)
+    boxes.sort(key=lambda b: b[1])
+    assert all(a[3] <= b[1] for a, b in zip(boxes, boxes[1:]))
+
+
+def test_footprint_labels_inside_figure_do_not_collide_and_segments_not_color_only(synthetic_data_dir, tmp_path):
+    from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH, footprint_chart
+    from tests.helpers.svg import assert_no_overlaps_and_inside, text_boxes
+
+    chart = footprint_chart(synthetic_data_dir)
+    width, height = (float(v) for v in chart.view_box.split()[2:])
+    els = _fp("index.en.html", tmp_path, synthetic_data_dir)
+    labels = [e["text"] for e in els if "segment-label" in e["classes"]]
+    assert labels == ["e-bike", "pedal", "unknown"]
+    assert_no_overlaps_and_inside(text_boxes(els, CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH), width, height)
+    fills = {e["attrs"]["fill"] for e in els if e["tag"] == "rect" and "segment" in e["classes"]}
+    assert len(fills) == 3 and sum(f.startswith("url(#") for f in fills) == 2
+    assert [e for e in els if "segment-sep" in e["classes"]]
+    assert all(l.x > chart.axes.right for l in chart.segment_labels)
