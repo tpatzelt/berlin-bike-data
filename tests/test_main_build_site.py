@@ -12,6 +12,7 @@ tried).
 
 from __future__ import annotations
 
+import re
 import shutil
 from datetime import datetime, timezone
 
@@ -43,6 +44,20 @@ def test_build_site_command_writes_index_and_methodology(tmp_path, synthetic_dat
     assert result == 0
     assert (site_dir / "index.html").is_file()
     assert (site_dir / "methodology.html").is_file()
+
+
+def test_build_site_command_passes_base_url_to_og_image(tmp_path, synthetic_data_dir, monkeypatch):
+    data_dir = _data_dir(tmp_path, synthetic_data_dir)
+    site_dir = tmp_path / "site-out"
+    monkeypatch.setenv("BIKES_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("BIKES_SITE_DIR", str(site_dir))
+    monkeypatch.setenv("BIKES_USER_AGENT", "berlinbikes-test/1.0")
+    monkeypatch.setenv("BIKES_SITE_BASE_URL", "https://example.org")
+
+    assert main(["build-site"]) == 0
+
+    html = (site_dir / "index.html").read_text()
+    assert re.search(r'<meta property="og:image" content="https://example\.org/', html)
 
 
 def _always_503_transport() -> httpx.MockTransport:

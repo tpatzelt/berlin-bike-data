@@ -204,7 +204,7 @@ def run_build_site(settings: Settings) -> int:
     if problems:
         logger.warning("areas: %d station(s) outside the Berlin polygons, left out of area metrics", len(problems))
     operator = {"name": settings.operator_name, "address": settings.operator_address, "email": settings.operator_email}
-    written = build_site(settings.data_dir, settings.site_dir, operator)
+    written = build_site(settings.data_dir, settings.site_dir, operator, base_url=settings.site_base_url)
     logger.info("site: wrote %d files to %s", len(written), settings.site_dir)
     return 0
 
