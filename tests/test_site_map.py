@@ -19,6 +19,8 @@ from tests.helpers.svg import (
     assert_axes_conventions,
     assert_no_overlaps_and_inside,
     chart_elements,
+    contrast_ratio,
+    css_token_blocks,
     text_boxes,
 )
 from tests.synthetic import EMPTY_STATION_ID
@@ -350,18 +352,9 @@ def test_map_js_names_markers_from_catalog_strings_and_bins_from_the_page():
 
 def test_avail_tokens_exist_in_both_themes_and_have_contrast(map_site):
     css = (map_site / "site.css").read_text()
-    root = re.search(r":root\s*{([^}]*)}", css).group(1)
-    dark = re.search(r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}", css).group(1)
-
-    def lum(h):
-        c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
-        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
-        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
-
-    for body, bg in ((root, "#ffffff"), (dark, "#121212")):
+    for tokens in css_token_blocks(css):
         for i in range(len(MAP_BINS)):
-            m = re.search(rf"--avail-{i}:\s*(#[0-9a-fA-F]{{6}});", body)
-            assert m, i
-            hi, lo = sorted((lum(m.group(1)), lum(bg)), reverse=True)
-            assert (hi + 0.05) / (lo + 0.05) >= 3
-            assert f".avail-{i} " in css
+            assert f"--avail-{i}" in tokens, i
+            assert contrast_ratio(tokens[f"--avail-{i}"], tokens["--bg"]) >= 3
+    for i in range(len(MAP_BINS)):
+        assert f".avail-{i} " in css
