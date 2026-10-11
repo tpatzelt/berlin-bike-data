@@ -147,3 +147,10 @@ def test_reduced_motion_block():
     body = m.group(1)
     assert "transition: none" in body and "animation: none" in body and "scroll-behavior: auto" in body
     assert "*" in body.split("{")[0]
+
+
+def test_show_ortsteil_hidden_override():
+    css = (STATIC / "site.css").read_text()
+    assert "display: inline-flex" in _rule_body_containing(css, ".show-ortsteil")
+    m = re.search(r"(?m)^\.show-ortsteil\[hidden\]\s*\{([^}]*)\}", css)
+    assert m and "display: none" in m.group(1)
