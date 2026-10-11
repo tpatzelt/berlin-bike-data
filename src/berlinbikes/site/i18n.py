@@ -33,6 +33,15 @@ STRINGS: dict[str, dict[str, str]] = {
     "weekday.short.4": {"de": "Fr", "en": "Fri"},
     "weekday.short.5": {"de": "Sa", "en": "Sat"},
     "weekday.short.6": {"de": "So", "en": "Sun"},
+    "lead.text": {
+        "de": "Wo stehen morgens um 8 Uhr noch Leihräder? Diese Seite wertet die öffentlich abrufbaren Bestandsdaten der Berliner Leihradsysteme aus und zeigt, wann und wo Räder fehlen.",
+        "en": "Where are the rental bikes still standing at 8am? This page analyses the publicly available stock data of Berlin's bike-share systems and shows when and where bikes run short.",
+    },
+    "callout.days": {"de": "volle Tage gesammelt", "en": "full days collected"},
+    "callout.bikes": {"de": "Räder verfügbar um {hour}:00 (Tiefpunkt an Wochentagen)", "en": "bikes available at {hour}:00 (weekday low)"},
+    "callout.shortage": {"de": "der Stationen um 8:00 leer (Wochentage)", "en": "of stations empty at 8:00 (weekdays)"},
+    "toc.aria": {"de": "Inhalt dieser Seite", "en": "On this page"},
+    "anchor.aria": {"de": "Link zu diesem Abschnitt", "en": "Link to this section"},
     "availability.heading": {"de": "Verfügbarkeit in Berlin", "en": "Availability in Berlin"},
     "availability.intro": {
         "de": "Mittlere Anzahl verfügbarer Räder in Berlin, je Wochentag und Uhrzeit (Europe/Berlin).",

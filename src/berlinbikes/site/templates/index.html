@@ -2,8 +2,28 @@
 {% block title %}{{ t("title.index") }}{% endblock %}
 {% block content %}
 {% import "_chart.html" as chart with context %}
+<section class="lead" aria-labelledby="lead-title">
+<h1 id="lead-title">{{ t("title.index") }}</h1>
+<p class="lead-text">{{ t("lead.text") }}</p>
+<ul class="callouts">
+<li><span class="callout-number">{{ availability_chart.full_days }}</span> <span class="callout-label">{{ t("callout.days") }}</span></li>
+{% if availability_chart.status == "ok" and availability_chart.headline %}
+<li><span class="callout-number">{{ "%.0f"|format(availability_chart.headline.value) }}</span> <span class="callout-label">{{ t("callout.bikes", hour=availability_chart.headline.hour) }}</span></li>
+{% endif %}
+{% if shortage_chart.status == "ok" and shortage_chart.share_pct is not none %}
+<li><span class="callout-number">{{ "%.1f"|format(shortage_chart.share_pct) }}%</span> <span class="callout-label">{{ t("callout.shortage") }}</span></li>
+{% endif %}
+</ul>
+<nav class="toc" aria-label="{{ t("toc.aria") }}">
+<ul>
+{% for sid in ["availability", "shortage", "bezirke", "flow", "weather", "footprint"] %}
+<li><a href="#{{ sid }}">{{ t(sid ~ ".heading") }}</a></li>
+{% endfor %}
+</ul>
+</nav>
+</section>
 <article id="availability">
-<h2>{{ t("availability.heading") }}</h2>
+<h2>{{ t("availability.heading") }} <a class="anchor" href="#availability" aria-label="{{ t("anchor.aria") }}">#</a></h2>
 <p>{{ t("availability.intro") }}</p>
 {% if availability_chart.status == "ok" %}
 <figure>
@@ -51,7 +71,7 @@
 {% endif %}
 </article>
 <article id="shortage">
-<h2>{{ t("shortage.heading") }}</h2>
+<h2>{{ t("shortage.heading") }} <a class="anchor" href="#shortage" aria-label="{{ t("anchor.aria") }}">#</a></h2>
 {% if shortage_chart.status == "ok" and shortage_chart.share_pct is not none %}
 <p>{{ t("shortage.summary", share_pct="%.1f"|format(shortage_chart.share_pct)) }}</p>
 {% endif %}
@@ -98,7 +118,7 @@
 {% endif %}
 </article>
 <article id="bezirke">
-<h2>{{ t("bezirke.heading") }}</h2>
+<h2>{{ t("bezirke.heading") }} <a class="anchor" href="#bezirke" aria-label="{{ t("anchor.aria") }}">#</a></h2>
 <p>{{ t("bezirke.intro") }}</p>
 {% if bezirk_availability_chart.status == "ok" %}
 <figure>
@@ -148,7 +168,7 @@
 {% endif %}
 </article>
 <article id="flow">
-<h2>{{ t("flow.heading") }}</h2>
+<h2>{{ t("flow.heading") }} <a class="anchor" href="#flow" aria-label="{{ t("anchor.aria") }}">#</a></h2>
 <p>{{ t("flow.intro") }}</p>
 {% if flow_chart.status == "ok" %}
 <figure>
@@ -199,7 +219,7 @@
 {% endif %}
 </article>
 <article id="weather">
-<h2>{{ t("weather.heading") }}</h2>
+<h2>{{ t("weather.heading") }} <a class="anchor" href="#weather" aria-label="{{ t("anchor.aria") }}">#</a></h2>
 <p>{{ t("weather.intro", rain=("%.1f"|format(rain_mm_threshold)), cold=("%.1f"|format(cold_c_threshold))) }}</p>
 {% if weather_chart.status == "ok" %}
 {% for kind_chart, kind_key in [(weather_chart.rain, "rain"), (weather_chart.temperature, "temperature")] %}
@@ -268,7 +288,7 @@
 {% endif %}
 </article>
 <article id="footprint">
-<h2>{{ t("footprint.heading") }}</h2>
+<h2>{{ t("footprint.heading") }} <a class="anchor" href="#footprint" aria-label="{{ t("anchor.aria") }}">#</a></h2>
 {% if footprint_chart.status == "ok" %}
 <p>{{ t("footprint.summary", date=footprint_chart.latest_date, n=footprint_chart.latest_n_stations, bikes="%.0f"|format(footprint_chart.latest_bikes_total)) }}</p>
 {% endif %}
