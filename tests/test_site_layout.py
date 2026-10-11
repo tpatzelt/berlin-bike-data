@@ -9,6 +9,7 @@ from html.parser import HTMLParser
 
 import pytest
 
+from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.site import PAGES, build_site
 
 TOKENS = ("--bg", "--fg", "--accent", "--muted")
@@ -285,8 +286,15 @@ def test_not_enough_data_component_shows_progress_and_day_count(empty_site):
         blocks = [b for b in blocks if "<progress" in b]
         assert len(blocks) == 6, name
         for block in blocks:
-            assert re.search(r'<progress value="0" max="14">', block)
+            assert f'<progress value="0" max="{MIN_FULL_DAYS}">' in block
             assert count in block
+
+
+def test_synthetic_site_has_no_progress_element(synthetic_site):
+    for name in ("index.html", "index.en.html"):
+        html = (synthetic_site / name).read_text()
+        assert "<article" in html, name
+        assert "<progress" not in html, name
 
 
 def test_not_enough_data_css_has_no_border_box():

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.profiles import station_profiles
 from berlinbikes.site import build_site
@@ -72,6 +73,9 @@ def test_profiles_json_without_data(tmp_path):
     payload = json.loads((tmp_path / "site" / "data" / "profiles.json").read_text())
     assert payload["status"] == "insufficient_data"
     assert payload["full_days"] == 0
+    assert payload["min_full_days"] == MIN_FULL_DAYS
+    js = (tmp_path / "site" / "map.js").read_text()
+    assert "showNotEnoughData(data.full_days, data.min_full_days)" in js
 
 
 def test_legal_pages_render_operator_details_and_third_parties(map_site, tmp_path):

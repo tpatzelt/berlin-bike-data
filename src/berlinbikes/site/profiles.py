@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.profiles import ortsteil_profiles, station_profiles
 
@@ -27,12 +28,13 @@ def profiles_payload(data_dir: str | Path) -> dict:
     each ``curve`` is 7 weekday lists (Monday first) of 24 hourly means,
     rounded to 1 decimal, ``null`` where there is no data. Below the
     14-full-day minimum: ``{"status": "insufficient_data", "full_days": N,
-    "message": ...}``.
+    "min_full_days": 14, "message": ...}``.
     """
     con = connect(Path(data_dir))
     stations = station_profiles(con)
     if stations.status != "ok":
-        return {"status": stations.status, "full_days": stations.full_days, "message": stations.message}
+        return {"status": stations.status, "full_days": stations.full_days,
+                "min_full_days": MIN_FULL_DAYS, "message": stations.message}
     ortsteile = ortsteil_profiles(con)
 
     by_station: dict[str, dict] = {}

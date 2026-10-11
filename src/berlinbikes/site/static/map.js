@@ -149,7 +149,7 @@
   function init(data) {
     state.data = data;
     if (data.status !== "ok") {
-      showNotEnoughData(data.full_days, 14);
+      showNotEnoughData(data.full_days, data.min_full_days);
       return;
     }
     $("profile-days").textContent = I18N.days.replace("{n}", data.full_days);
