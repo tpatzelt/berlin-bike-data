@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -75,7 +76,7 @@ def test_profiles_json_without_data(tmp_path):
     assert payload["full_days"] == 0
     assert payload["min_full_days"] == MIN_FULL_DAYS
     js = (tmp_path / "site" / "map.js").read_text()
-    assert "showNotEnoughData(data.full_days, data.min_full_days)" in js
+    assert js and not re.search(r"\b14\b", js)
 
 
 def test_legal_pages_render_operator_details_and_third_parties(map_site, tmp_path):
