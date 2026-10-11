@@ -8,6 +8,15 @@ LANGS = ("de", "en")
 
 STRINGS: dict[str, dict[str, str]] = {
     "site.title": {"de": "Wie Berlin radelt", "en": "How Berlin Rides"},
+    "nav.skip": {"de": "Zum Inhalt springen", "en": "Skip to content"},
+    "meta.description": {
+        "de": "Wo und wann Berliner Leihräder fehlen: Auswertung der öffentlichen Bestandsdaten von Nextbike und Dott.",
+        "en": "Where and when Berlin's rental bikes run short: an analysis of the public stock data of Nextbike and Dott.",
+    },
+    "meta.image_alt": {
+        "de": "Vorschaubild: Wie Berlin radelt – wann und wo Leihräder fehlen",
+        "en": "Preview image: How Berlin Rides – when and where rental bikes run short",
+    },
     "nav.label": {"de": "Hauptnavigation", "en": "Main navigation"},
     "nav.home": {"de": "Start", "en": "Home"},
     "nav.map": {"de": "Karte", "en": "Map"},
