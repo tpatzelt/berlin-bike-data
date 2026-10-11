@@ -166,6 +166,8 @@ header, main, footer { max-width: 64rem; margin-inline: auto; }
 
 .map-controls label { display: block; font-weight: 600; }
 
+.map-controls select, .map-controls input { max-width: 100%; font: inherit; }
+
 .map-controls select { max-width: 100%; font: inherit; }
 
 .map-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 var(--space-5); }

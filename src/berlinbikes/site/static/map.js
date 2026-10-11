@@ -41,6 +41,17 @@
     status.hidden = false;
   }
 
+  // Round tick values (step 1/2/5 x 10^n) covering [lo, hi]; same rule as charts.nice_ticks.
+  function niceTicks(lo, hi) {
+    if (hi <= lo) hi = lo + 1;
+    var raw = (hi - lo) / I18N.y_tick_target;
+    var magnitude = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+    var step = [1, 2, 5, 10].map(function (m) { return m * magnitude; }).filter(function (s) { return s >= raw; })[0];
+    var first = Math.floor(lo / step + 1e-9), last = Math.ceil(hi / step - 1e-9), ticks = [];
+    for (var i = first; i <= last; i++) ticks.push(Math.round(i * step * 1e10) / 1e10);
+    return ticks;
+  }
+
   function render() {
     var svg = $("profile-chart");
     if (!svg) return;
@@ -53,19 +64,22 @@
     var box = svg.viewBox.baseVal;
     var H = box.height, PAD_L = I18N.plot.left, PAD_T = I18N.plot.top, bottom = I18N.plot.bottom, right = I18N.plot.right;
     var weekday = Number($("pick-weekday").value);
+    var hour = Number($("pick-hour").value);
     var values = state.curve[weekday];
-    var max = Math.max(1, Math.ceil(Math.max.apply(null, values.map(function (v) { return v || 0; }))));
-    var x = function (h) { return PAD_L + (h / 23) * (right - PAD_L); };
-    var y = function (v) { return bottom - (v / max) * (bottom - PAD_T); };
+    var present = values.filter(function (v) { return v !== null; });
+    var yTicks = niceTicks(0, Math.max.apply(null, [1].concat(present)));
+    var yMin = yTicks[0], yMax = yTicks[yTicks.length - 1];
+    var x = function (h) { return PAD_L + (h / (values.length - 1)) * (right - PAD_L); };
+    var y = function (v) { return bottom - ((v - yMin) / (yMax - yMin)) * (bottom - PAD_T); };
 
     var grid = el("g", { "class": "grid-lines" });
     var xAxis = el("g", { "class": "axis axis-x" });
     var yAxis = el("g", { "class": "axis axis-y" });
-    [0, max / 2, max].forEach(function (v) {
+    yTicks.forEach(function (v) {
       grid.appendChild(el("line", { "class": "grid", x1: PAD_L, x2: right, y1: y(v), y2: y(v) }));
-      yAxis.appendChild(el("text", { "class": "tick", x: PAD_L - 6, y: y(v) + 5, "text-anchor": "end" }, String(Math.round(v * 10) / 10)));
+      yAxis.appendChild(el("text", { "class": "tick", x: PAD_L - 6, y: y(v) + 5, "text-anchor": "end" }, String(v)));
     });
-    [0, 4, 8, 12, 16, 20, 23].forEach(function (h) {
+    I18N.x_ticks.forEach(function (h) {
       grid.appendChild(el("line", { "class": "grid", x1: x(h), x2: x(h), y1: PAD_T, y2: bottom }));
       xAxis.appendChild(el("text", { "class": "tick", x: x(h), y: bottom + 20, "text-anchor": "middle" }, String(h)));
     });
@@ -78,14 +92,14 @@
     var points = [];
     values.forEach(function (v, h) { if (v !== null) points.push(x(h) + "," + y(v)); });
     svg.appendChild(el("polyline", { points: points.join(" "), fill: "none", stroke: "var(--accent)", "stroke-width": 2.5 }));
-    var atHour = values[I18N.hour];
+    var atHour = values[hour];
     if (atHour !== null) {
       var head = el("g", { "class": "headline" });
-      var anchorStart = x(I18N.hour) < (PAD_L + right) / 2;
-      head.appendChild(el("circle", { cx: x(I18N.hour), cy: y(atHour), r: 5 }));
-      head.appendChild(el("text", { x: x(I18N.hour) + (anchorStart ? 10 : -10), y: Math.min(y(atHour) + 22, bottom - 4),
+      var anchorStart = x(hour) < (PAD_L + right) / 2;
+      head.appendChild(el("circle", { cx: x(hour), cy: y(atHour), r: 5 }));
+      head.appendChild(el("text", { x: x(hour) + (anchorStart ? 10 : -10), y: Math.min(y(atHour) + 22, bottom - 4),
         "text-anchor": anchorStart ? "start" : "end" },
-        I18N.headline.replace("{value}", Math.round(atHour)).replace("{hour}", I18N.hour)));
+        I18N.headline.replace("{value}", Math.round(atHour)).replace("{hour}", hour)));
       svg.appendChild(head);
     }
     svg.setAttribute("aria-label", state.title + ": " + values.map(function (v, h) {
@@ -113,26 +127,87 @@
     if (id && state.markers[id]) state.markers[id].setStyle({ radius: 9, weight: 3 }).bringToFront();
   }
 
+  function stationById(id) {
+    return state.data.stations.find(function (s) { return s.id === id; });
+  }
+
+  function stationLabel(station) {
+    return station.name || station.id;
+  }
+
+  function showOrtsteilButton(station) {
+    var button = $("show-ortsteil");
+    button.hidden = !(station && station.ortsteil);
+    if (!button.hidden) button.dataset.ortsteil = station.ortsteil;
+  }
+
   function pickStation(id) {
-    var station = state.data.stations.find(function (s) { return s.id === id; });
-    if (!station) return;
+    var station = stationById(id);
+    if (!station) return false;
     $("pick-station").value = id;
     $("pick-ortsteil").value = "";
+    $("pick-search").value = stationLabel(station);
     state.curve = station.curve;
     state.title = station.name + (station.ortsteil ? " (" + station.ortsteil + ")" : "");
     highlight(id);
+    showOrtsteilButton(station);
     render();
+    return true;
   }
 
   function pickOrtsteil(name) {
     var ortsteil = state.data.ortsteile.find(function (o) { return o.name === name; });
-    if (!ortsteil) return;
+    if (!ortsteil) return false;
     $("pick-station").value = "";
     $("pick-ortsteil").value = name;
+    $("pick-search").value = "";
     state.curve = ortsteil.curve;
     state.title = I18N.ortsteil_title.replace("{name}", function () { return name; });
     highlight(null);
+    showOrtsteilButton(null);
     render();
+    return true;
+  }
+
+  // The selection lives in the URL hash: #station=<id>|ortsteil=<name>&wd=<0-6>&h=<0-23>.
+  function writeHash() {
+    var parts = [];
+    if ($("pick-station").value) parts.push("station=" + encodeURIComponent($("pick-station").value));
+    else if ($("pick-ortsteil").value) parts.push("ortsteil=" + encodeURIComponent($("pick-ortsteil").value));
+    parts.push("wd=" + $("pick-weekday").value, "h=" + $("pick-hour").value);
+    history.replaceState(null, "", "#" + parts.join("&"));
+  }
+
+  function parseHash() {
+    var params = {};
+    location.hash.replace(/^#/, "").split("&").forEach(function (pair) {
+      var i = pair.indexOf("=");
+      if (i < 1) return;
+      try { params[pair.slice(0, i)] = decodeURIComponent(pair.slice(i + 1)); } catch (e) { /* ignore bad escapes */ }
+    });
+    return params;
+  }
+
+  function inRange(text, max) {
+    return /^\d+$/.test(text || "") && Number(text) <= max ? text : null;
+  }
+
+  // Apply the hash to the controls; anything missing or invalid falls back to the default.
+  function applyHash() {
+    var params = parseHash();
+    var wd = inRange(params.wd, $("pick-weekday").options.length - 1);
+    var h = inRange(params.h, $("pick-hour").options.length - 1);
+    $("pick-weekday").value = wd === null ? state.defaults.weekday : wd;
+    $("pick-hour").value = h === null ? state.defaults.hour : h;
+    var ok = (params.station && pickStation(params.station)) || (params.ortsteil && pickOrtsteil(params.ortsteil));
+    if (!ok) pickStation(state.defaults.station);
+    else render();
+  }
+
+  function onSearch(e) {
+    var typed = e.target.value.trim().toLowerCase();
+    var match = state.data.stations.find(function (s) { return stationLabel(s).toLowerCase() === typed; });
+    if (match && pickStation(match.id)) writeHash();
   }
 
   function initMap(stations) {
@@ -146,7 +221,7 @@
     stations.forEach(function (s) {
       var marker = L.circleMarker([s.lat, s.lon], { radius: 5, weight: 1, color: colour, fillOpacity: 0.6 })
         .bindTooltip(s.name)
-        .on("click", function () { pickStation(s.id); })
+        .on("click", function () { if (pickStation(s.id)) writeHash(); })
         .addTo(map);
       state.markers[s.id] = marker;
     });
@@ -161,11 +236,22 @@
     // The server pre-fills these selects; rebuild them so no option appears twice.
     fillSelect($("pick-station"), data.stations.map(function (s) { return option(s.id, s.name || s.id); }));
     fillSelect($("pick-ortsteil"), data.ortsteile.map(function (o) { return option(o.name, o.name); }));
-    $("pick-station").addEventListener("change", function (e) { pickStation(e.target.value); });
-    $("pick-ortsteil").addEventListener("change", function (e) { pickOrtsteil(e.target.value); });
-    $("pick-weekday").addEventListener("change", render);
+    var list = $("station-names");
+    while (list.firstChild) list.removeChild(list.firstChild);
+    data.stations.forEach(function (s) { list.appendChild(option(stationLabel(s), "")); });
+    state.defaults = { weekday: $("pick-weekday").value, hour: $("pick-hour").value, station: data.stations.length ? data.stations[0].id : "" };
+    $("show-ortsteil").textContent = I18N.ortsteil_button;
+    $("pick-station").addEventListener("change", function (e) { if (pickStation(e.target.value)) writeHash(); });
+    $("pick-ortsteil").addEventListener("change", function (e) { if (pickOrtsteil(e.target.value)) writeHash(); });
+    $("pick-search").addEventListener("input", onSearch);
+    $("show-ortsteil").addEventListener("click", function (e) {
+      if (pickOrtsteil(e.currentTarget.dataset.ortsteil)) writeHash();
+    });
+    $("pick-weekday").addEventListener("change", function () { render(); writeHash(); });
+    $("pick-hour").addEventListener("change", function () { render(); writeHash(); });
+    window.addEventListener("hashchange", applyHash);
     initMap(data.stations);
-    if (data.stations.length) pickStation(data.stations[0].id);
+    applyHash();
   }
 
   document.addEventListener("DOMContentLoaded", function () {

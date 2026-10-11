@@ -22,10 +22,20 @@
   "load_error": t("map.load_error"),
   "axis_x": t("map.axis.x"),
   "axis_y": t("map.axis.y"),
-  "headline": t("map.headline", value="{value}", hour="{hour}")
+  "headline": t("map.headline", value="{value}", hour="{hour}"),
+  "x_ticks": map_chart.axes.x_ticks | map(attribute="label") | map("int") | list if map_chart else none,
+  "y_tick_target": map_y_tick_target,
+  "ortsteil_button": t("map.ortsteil_button")
 } | tojson }}</script>
 <p id="map-status" class="not-enough-data" hidden></p>
 <form class="map-controls" onsubmit="return false">
+<p>
+<label for="pick-search">{{ t("map.label.search") }}</label>
+<input id="pick-search" type="search" list="station-names" autocomplete="off" placeholder="{{ t("map.search.placeholder") }}">
+<datalist id="station-names">
+{% if map_default %}{% for s in map_payload.stations %}<option value="{{ s.name or s.id }}">
+{% endfor %}{% endif %}</datalist>
+</p>
 <p>
 <label for="pick-station">{{ t("map.label.station") }}</label>
 <select id="pick-station"><option value="">–</option>
@@ -44,6 +54,12 @@
 {% for i in range(7) %}<option value="{{ i }}"{% if i == 0 %} selected{% endif %}>{{ t("map.weekday." ~ i) }}</option>
 {% endfor %}</select>
 </p>
+<p>
+<label for="pick-hour">{{ t("map.label.hour") }}</label>
+<select id="pick-hour">
+{% for i in range(24) %}<option value="{{ i }}"{% if i == map_default_hour %} selected{% endif %}>{{ i }}:00</option>
+{% endfor %}</select>
+</p>
 </form>
 <div class="map-layout">
 <div id="map" class="map" aria-label="{{ t("map.aria") }}"></div>
@@ -51,6 +67,7 @@
 {% if map_chart %}
 <figure class="map-profile">
 <h3 id="profile-title">{{ map_default.name or map_default.id }}{% if map_default.ortsteil %} ({{ map_default.ortsteil }}){% endif %}</h3>
+<button type="button" id="show-ortsteil" class="show-ortsteil" hidden></button>
 <svg id="profile-chart" class="chart" viewBox="{{ map_chart.view_box }}" font-size="{{ map_chart.axes.font_size }}" role="img" aria-label="{{ t("map.chart.aria") }}">
 {{ chart.axes_frame(map_chart.axes, t("map.axis.x"), t("map.axis.y")) }}
 <polyline points="{{ map_chart.points }}" fill="none" stroke="var(--accent)" stroke-width="2.5"></polyline>

@@ -143,7 +143,7 @@ def test_map_pages_are_single_language(map_site):
 def test_map_i18n_json_is_per_language_and_complete(map_site):
     de = json.loads(_collect(map_site / "map.html").i18n_json)
     en = json.loads(_collect(map_site / "map.en.html").i18n_json)
-    assert set(de) == set(en) == {"days", "ortsteil_title", "load_error", "hour", "plot", "axis_x", "axis_y", "headline"}
+    assert set(de) == set(en) == {"days", "ortsteil_title", "load_error", "hour", "plot", "axis_x", "axis_y", "headline", "x_ticks", "y_tick_target", "ortsteil_button"}
     assert de["days"] == "({n} Tage)" and en["days"] == "({n} days)"
     assert de["load_error"].startswith("Daten") and en["load_error"].startswith("Could not")
     assert en["ortsteil_title"] == "District {name}"
@@ -281,3 +281,39 @@ def test_map_css_places_map_and_profile_side_by_side_on_wide_screens():
 def test_map_js_replaces_prefilled_options():
     js = (Path(__file__).parent.parent / "src/berlinbikes/site/static/map.js").read_text()
     assert "fillSelect(" in js and "select.remove(1)" in js
+
+
+_JS = Path(__file__).parent.parent / "src/berlinbikes/site/static/map.js"
+
+
+def test_map_js_round_trips_the_selection_through_the_hash():
+    assert _JS.exists()
+    js = "\n".join(l for l in _JS.read_text().splitlines() if not l.lstrip().startswith("//"))
+    assert "hashchange" in js and "history.replaceState" in js and "location.hash" in js
+    assert "encodeURIComponent" in js and "decodeURIComponent" in js
+    assert 'pick-hour' in js
+    # the marked hour comes from the picker, never a literal
+    assert not re.search(r"\[\s*8\s*\]|hour\s*[=:]\s*8\b|x\(\s*8\s*\)", js)
+    assert "[0, 4, 8" not in js and "/ 23" not in js
+
+
+def test_map_js_tick_values_come_from_the_server():
+    js = _JS.read_text()
+    assert "I18N.x_ticks" in js and "I18N.y_tick_target" in js and "niceTicks(" in js
+
+
+@pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
+def test_map_page_has_hour_picker_search_and_ortsteil_button(map_site, page, lang):
+    html = (map_site / page).read_text()
+    assert '<select id="pick-hour">' in html and '<label for="pick-hour">' in html
+    assert f'<option value="{MAP_DEFAULT_HOUR}" selected>' in html
+    assert html.count('<option value="') >= 24
+    assert '<label for="pick-search">' in html
+    assert re.search(r'<input id="pick-search"[^>]*list="station-names"', html)
+    assert '<datalist id="station-names">' in html
+    label = {"de": "Station suchen", "en": "Search for a station"}[lang]
+    assert label in html
+    i18n = json.loads(_collect(map_site / page).i18n_json)
+    assert i18n["ortsteil_button"] == {"de": "Ganzes Ortsteil zeigen", "en": "Show the whole Ortsteil"}[lang]
+    assert i18n["x_ticks"][0] == 0 and i18n["y_tick_target"] >= 1
+    assert 'id="show-ortsteil"' in html
