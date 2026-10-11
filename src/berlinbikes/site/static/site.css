@@ -73,6 +73,19 @@ body {
   line-height: 1.5;
 }
 
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg);
+  color: var(--fg);
+  border: 2px solid var(--accent);
+  transform: translateY(-300%);
+}
+
+.skip-link:focus { transform: none; z-index: 10; }
+
 header, main, footer { padding: var(--space-4); width: 100%; }
 
 h1, h2, h3 { line-height: 1.2; text-wrap: balance; }

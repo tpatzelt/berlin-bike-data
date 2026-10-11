@@ -98,7 +98,7 @@ def test_footer_links_to_methodology_page(either_page):
 
 def test_footer_links_resolve_to_other_generated_pages(site_dir):
     parsed = _parse((site_dir / "methodology.html").read_text())
-    local_hrefs = [href for href in parsed.hrefs if not href.startswith("http")]
+    local_hrefs = [href for href in parsed.hrefs if not href.startswith(("http", "#"))]
     assert set(local_hrefs) >= set(PAGES)
     for href in local_hrefs:
         assert (site_dir / href).exists(), href

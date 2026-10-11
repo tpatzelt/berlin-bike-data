@@ -26,12 +26,18 @@ from berlinbikes.site.charts import (
     shortage_chart,
     weather_effect_chart,
 )
+from berlinbikes.config import site_base_url
 from berlinbikes.site.i18n import LANGS, t
 from berlinbikes.site.profiles import profiles_payload, write_profiles_json
 from berlinbikes.site.sources import DATA_SOURCES
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
+
+OG_IMAGE = "og-image.png"
+OG_IMAGE_SIZE = (1200, 630)
+FAVICON = "favicon.svg"
+OG_LOCALES = {"de": "de_DE", "en": "en_GB"}
 
 PAGES = ("index.html", "map.html", "methodology.html", "impressum.html", "datenschutz.html")
 
@@ -48,12 +54,16 @@ def page_url(page: str, lang: str) -> str:
 DEFAULT_OPERATOR = {"name": "[NAME]", "address": "[ANSCHRIFT]", "email": "[E-MAIL]"}
 
 
-def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, str] | None = None) -> list[Path]:
+def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, str] | None = None, base_url: str | None = None) -> list[Path]:
     """Render ``PAGES`` and copy static assets into ``site_dir``.
+
+    ``base_url`` (default: ``BIKES_SITE_BASE_URL``) makes og:url and og:image
+    absolute; when empty they stay relative.
 
     Writes only under ``site_dir``; never touches the repository.
     """
     site_dir = Path(site_dir)
+    base_url = (site_base_url() if base_url is None else base_url).rstrip("/")
     site_dir.mkdir(parents=True, exist_ok=True)
 
     env = Environment(
@@ -82,6 +92,8 @@ def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, s
         "min_full_days": MIN_FULL_DAYS,
         "rain_mm_threshold": RAIN_MM_THRESHOLD,
         "cold_c_threshold": COLD_C_THRESHOLD,
+        "og_image": OG_IMAGE,
+        "og_image_size": OG_IMAGE_SIZE,
         "operator": operator or DEFAULT_OPERATOR,
     }
 
@@ -95,6 +107,8 @@ def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, s
                 "page": page,
                 "t": lambda key, _lang=lang, **kw: t(key, _lang, **kw),
                 "url": lambda target, _lang=lang: page_url(target, _lang),
+                "og_locale": OG_LOCALES[lang],
+                "abs_url": lambda target: f"{base_url}/{target}" if base_url else target,
                 "page_urls": {other: page_url(page, other) for other in LANGS},
                 "counterpart_lang": "en" if lang == "de" else "de",
                 "counterpart_url": page_url(page, "en" if lang == "de" else "de"),
@@ -102,9 +116,9 @@ def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, s
             out_path.write_text(env.get_template(page).render(**page_context))
             written.append(out_path)
 
-    for asset in ("site.css", "map.js"):
+    for asset in ("site.css", "map.js", OG_IMAGE, FAVICON):
         asset_dst = site_dir / asset
-        asset_dst.write_text((_STATIC_DIR / asset).read_text())
+        asset_dst.write_bytes((_STATIC_DIR / asset).read_bytes())
         written.append(asset_dst)
 
     written.append(write_profiles_json(data_dir, site_dir))
