@@ -138,6 +138,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "Anteil leerer Stationen (%) je Uhrzeit (0–23 Uhr, Europe/Berlin), {kind}, auf Basis von {full_days} vollen Tagen; {excluded} Stunden ohne Wetterdaten ausgeschlossen.",
         "en": "Share of empty stations (%) by local hour (0–23, Europe/Berlin), {kind}, based on {full_days} full days; {excluded} hours excluded for missing weather.",
     },
+    "weather.axis.x": {"de": "Uhrzeit (Uhr, Europe/Berlin)", "en": "Local hour (h, Europe/Berlin)"},
+    "weather.axis.y": {"de": "Leere Stationen (%)", "en": "Empty stations (%)"},
+    "weather.headline.both": {
+        "de": "{first} {first_value} % · {second} {second_value} %",
+        "en": "{first} {first_value} % · {second} {second_value} %",
+    },
+    "weather.headline.single": {"de": "{first} {first_value} %", "en": "{first} {first_value} %"},
     "weather.table.caption": {
         "de": "Anteil leerer Stationen je Uhrzeit, {kind}",
         "en": "Share of empty stations by local hour, {kind}",

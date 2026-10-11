@@ -95,3 +95,5 @@ th, td { padding: 0.15rem 0.4rem; text-align: right; }
 .map-controls select { max-width: 100%; font: inherit; }
 
 .map-credit { font-size: 0.85rem; color: var(--muted); }
+
+svg.chart .series-label { fill: var(--fg); paint-order: stroke; stroke: var(--bg); stroke-width: 4; }

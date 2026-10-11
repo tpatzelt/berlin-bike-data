@@ -13,6 +13,7 @@ case does not crash the nightly build.
 
 from __future__ import annotations
 
+import re
 import shutil
 
 import pytest
@@ -20,6 +21,15 @@ import pytest
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.weather_effect import COLD_C_THRESHOLD, RAIN_MM_THRESHOLD, weather_effect
 from berlinbikes.site import build_site
+from berlinbikes.site.charts import (
+    CHART_FONT_SIZE,
+    WEATHER_HEADLINE_CHARS,
+    _weather_kind_chart,
+    boxes_intersect,
+    build_axes,
+    text_box,
+)
+from tests.helpers.svg import assert_axes_conventions, polyline_dasharrays, root_font_size
 from tests.test_metric_weather import _write_weather_day
 from tests.test_site_article import _ancestors, _find_all, _parse, _preorder, _text
 
@@ -204,3 +214,95 @@ def test_insufficient_data_shows_not_enough_data_and_no_weather_chart(tmp_path):
     assert "not enough data yet" in en_lowered
     assert "noch nicht genug daten" not in en_lowered
     assert "0/14" in html or "0 / 14" in html
+
+
+def _weather_svg_html(html: str) -> list[str]:
+    return re.findall(r'<svg[^>]*class="chart weather".*?</svg>', html, flags=re.S)
+
+
+def _number(text: str) -> float:
+    return float(re.search(r"(\d+[.,]\d)", text).group(1).replace(",", "."))
+
+
+@pytest.mark.parametrize("lang", ["de", "en"])
+def test_weather_charts_have_shared_axes_dashes_and_labels(synthetic_data_dir, tmp_path, lang):
+    data_dir, site_dir = _build_site_with_weather(synthetic_data_dir, tmp_path)
+    html = (site_dir / ("index.html" if lang == "de" else "index.en.html")).read_text()
+    svgs = _weather_svg_html(html)
+    assert len(svgs) == 2
+    y_title = "Leere Stationen (%)" if lang == "de" else "Empty stations (%)"
+    labels = _LABELS[lang]
+    ticks = []
+    for svg, (kind, active, other) in zip(svgs, [("rain", "rainy", "dry"), ("temperature", "cold", "warm")]):
+        els = assert_axes_conventions(svg)
+        titles = [e for e in els if "axis-title-y" in e["classes"]]
+        assert titles[0]["text"] == y_title
+        ticks.append([e["text"] for e in els if "tick" in e["classes"] and "axis-y" in e["groups"]])
+        # active bucket dashed, baseline solid, both labelled directly on the chart
+        dashes = polyline_dasharrays(els)
+        assert dashes[0] not in ("none", "") and dashes[1] == "none"
+        series_labels = [e["text"] for e in els if "series-label" in e["classes"]]
+        assert series_labels == [labels[active], labels[other]]
+        # each label sits at its own line's last point, and the two never overprint
+        polys = [e for e in els if e["tag"] == "polyline"]
+        texts = [e for e in els if "series-label" in e["classes"]]
+        positions = [(float(t["attrs"]["x"]), float(t["attrs"]["y"])) for t in texts]
+        assert positions[0] != positions[1]
+        assert abs(positions[0][1] - positions[1][1]) >= CHART_FONT_SIZE
+        for poly, (lx, _ly) in zip(polys, positions):
+            last_x = float(poly["attrs"]["points"].split()[-1].split(",")[0])
+            assert abs(lx - last_x) <= 2 * CHART_FONT_SIZE
+        assert "chart-legend" not in svg
+        # headline: both plotted 8:00 values
+        result = weather_effect(connect(data_dir), kind)
+        at_8 = {b: share * 100 for b, h, _m, share, _s, _n in result.rows if h == 8 and b != "excluded"}
+        label = [e for e in els if e["tag"] == "text" and "headline" in e["groups"]][0]["text"]
+        assert label.count("%") == 2
+        assert labels[active] in label and labels[other] in label
+        assert _number(label.split("·")[0]) == pytest.approx(round(at_8[active], 1))
+        assert _number(label.split("·")[1]) == pytest.approx(round(at_8[other], 1))
+        assert len([e for e in els if e["tag"] == "circle" and "headline" in e["groups"]]) == 2
+        # no series label overprints the headline label
+        head = [e for e in els if e["tag"] == "text" and "headline" in e["groups"]][0]
+        head_box = text_box(float(head["attrs"]["x"]), float(head["attrs"]["y"]), WEATHER_HEADLINE_CHARS, head["attrs"]["text-anchor"])
+        for t in texts:
+            box = text_box(float(t["attrs"]["x"]), float(t["attrs"]["y"]), len(t["text"]), t["attrs"]["text-anchor"])
+            assert not boxes_intersect(box, head_box), (t["text"], box, head_box)
+        assert root_font_size(svg) == CHART_FONT_SIZE
+    assert ticks[0] == ticks[1], "both small multiples share one y scale"
+
+
+def test_series_labels_near_top_edge_stay_apart_inside_the_plot():
+    axes = build_axes(0, 20)
+    by_bucket = {"rainy": {h: 20.0 for h in range(24)}, "dry": {h: 19.9 for h in range(24)}}
+    chart = _weather_kind_chart("rain", by_bucket, 0, axes)
+    a, b = chart.buckets
+    assert abs(a.label_y - b.label_y) >= CHART_FONT_SIZE
+    for s in (a, b):
+        assert s.label_y >= axes.top + CHART_FONT_SIZE * 0.8  # glyphs stay inside the plot box
+        assert s.label_y <= axes.bottom
+    boxes = [text_box(s.label_x, s.label_y, len(s.label_de), "end") for s in (a, b)]
+    assert not boxes_intersect(*boxes)
+
+
+def test_headline_moves_above_markers_when_a_series_label_would_overprint_it():
+    axes = build_axes(0, 20)
+    by_bucket = {"rainy": {h: 10.0 for h in range(24)}, "dry": {h: 12.0 for h in range(24)}}
+    chart = _weather_kind_chart("rain", by_bucket, 0, axes)
+    head = chart.headline
+    head_box = text_box(head.label_x, head.label_y, WEATHER_HEADLINE_CHARS, head.anchor)
+    for s in chart.buckets:
+        for text in (s.label_de, s.label_en):
+            assert not boxes_intersect(text_box(s.label_x, s.label_y, len(text), "end"), head_box)
+
+
+def test_missing_bucket_marks_only_the_present_one():
+    from berlinbikes.site.charts import _weather_kind_chart, build_axes
+
+    axes = build_axes(0, 20)
+    by_bucket = {"dry": {h: 10.0 + h for h in range(24)}}
+    chart = _weather_kind_chart("rain", by_bucket, 0, axes)
+    assert [b.bucket for b in chart.buckets] == ["dry"]
+    assert chart.missing_buckets == [("regnerisch", "rainy")]
+    assert len(chart.headline_points) == 1
+    assert chart.headline_points[0].value == 18.0
