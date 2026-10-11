@@ -13,13 +13,16 @@ positive in the evening" scripted shape from ``tests/synthetic.py``.
 
 from __future__ import annotations
 
-import re
-
 import pytest
 
 from berlinbikes.site import charts
-from berlinbikes.site.charts import CHART_FONT_SIZE, cycle_dasharray
-from tests.helpers.svg import assert_axes_conventions, chart_elements, polyline_dasharrays, root_font_size
+from tests.helpers.svg import (
+    assert_axes_conventions,
+    figure_html,
+    label_fits,
+    polyline_dasharrays,
+    root_font_size,
+)
 
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.flow import net_flow_by_bezirk
@@ -151,27 +154,13 @@ def test_empty_data_dir_shows_not_enough_data_and_no_flow_chart(tmp_path):
     assert not _find_all(article, "svg"), "no flow chart should render below the 14-full-day minimum"
 
 
-def _figure_html(html: str, article_id: str) -> str:
-    start = html.index(f'<article id="{article_id}">')
-    figure = html[html.index("<figure>", start) :]
-    return figure[: figure.index("</figure>")]
-
-
-def _label_fits(headline, text, axes) -> bool:
-    """Both label lines (name, then value) stay inside the plot box."""
-    width = max(len(line) for line in text.split()[:1] + [" ".join(text.split()[1:])]) * 0.55 * CHART_FONT_SIZE
-    x = headline.label_x
-    lo, hi = {"start": (x, x + width), "end": (x - width, x), "middle": (x - width / 2, x + width / 2)}[headline.anchor]
-    return axes.left <= lo and hi <= axes.right + 1
-
-
 
 @pytest.mark.parametrize("name,lang", [("index.html", "de"), ("index.en.html", "en")])
 def test_flow_chart_has_labelled_zero_line_axes_and_loss_headline(synthetic_data_dir, tmp_path, name, lang):
     site_dir = tmp_path / "site"
     build_site(synthetic_data_dir, site_dir)
     html = (site_dir / name).read_text()
-    els = assert_axes_conventions(_figure_html(html, "flow"))
+    els = assert_axes_conventions(figure_html(html, "flow"))
     assert polyline_dasharrays(els) == ["none"] * len(BEZIRKE)  # one color cycle: colors alone differ
 
     titles = [e["text"] for e in els if "axis-title-y" in e["classes"]]
@@ -194,9 +183,9 @@ def test_flow_chart_has_labelled_zero_line_axes_and_loss_headline(synthetic_data
     label = [e for e in els if e["tag"] == "text" and "headline" in e["groups"]][0]
     word = "Räder/Std. um" if lang == "de" else "bikes/h at"
     assert " ".join(label["text"].split()) == f"{bezirk} {loss:.1f} {word} {hour}:00"
-    assert _label_fits(chart.headline, label["text"], chart.axes)
+    assert label_fits(chart.headline, label["text"], chart.axes)
 
-    figure = _figure_html(html, "flow")
+    figure = figure_html(html, "flow")
     legend = figure[figure.index('class="chart-legend"') :]
     assert legend.count("swatch-line") == len(BEZIRKE)
 

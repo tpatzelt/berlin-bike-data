@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from html.parser import HTMLParser
 
+from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH
+
 
 class _Svg(HTMLParser):
     """Collects the first <svg class="chart"> subtree as (tag, attrs, class-path, text) rows."""
@@ -133,3 +135,30 @@ def assert_no_overlaps_and_inside(boxes, width: float, height: float) -> None:
     for i, a in enumerate(boxes):
         for b in boxes[i + 1 :]:
             assert a[3] <= b[1] or b[3] <= a[1] or a[4] <= b[2] or b[4] <= a[2], (a[0], b[0])
+
+
+def figure_html(html: str, article_id: str) -> str:
+    """The first ``<figure>`` of ``<article id=article_id>``."""
+    start = html.index(f'<article id="{article_id}">')
+    figure = html[html.index("<figure>", start) :]
+    return figure[: figure.index("</figure>")]
+
+
+def label_fits(headline, text, axes) -> bool:
+    """Both label lines (name, then value) stay inside the plot box."""
+    width = max(len(line) for line in text.split()[:1] + [" ".join(text.split()[1:])]) * HEADLINE_CHAR_WIDTH * CHART_FONT_SIZE
+    x = headline.label_x
+    lo, hi = {"start": (x, x + width), "end": (x - width, x), "middle": (x - width / 2, x + width / 2)}[headline.anchor]
+    return axes.left <= lo and hi <= axes.right + 1
+
+
+def main_html(html: str) -> str:
+    """The ``<main>`` element of a page."""
+    assert "<main" in html and "</main>" in html, "page has no <main>"
+    return html[html.index("<main") : html.index("</main>")]
+
+
+def chart_count(html: str) -> int:
+    parser = _Svg()
+    parser.feed(html)
+    return sum(1 for e in parser.elements if e["tag"] == "svg" and "chart" in e["classes"])

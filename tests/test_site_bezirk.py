@@ -9,13 +9,17 @@ table fallback, following the same pattern as the citywide chart tested in
 
 from __future__ import annotations
 
-import re
-
 import pytest
 
 from berlinbikes.site import charts
 from berlinbikes.site.charts import CHART_FONT_SIZE, cycle_dasharray
-from tests.helpers.svg import assert_axes_conventions, chart_elements, polyline_dasharrays, root_font_size
+from tests.helpers.svg import (
+    assert_axes_conventions,
+    figure_html,
+    label_fits,
+    polyline_dasharrays,
+    root_font_size,
+)
 
 from berlinbikes.analysis.availability import availability_by_hour
 from berlinbikes.analysis.db import connect
@@ -120,20 +124,6 @@ def test_empty_data_dir_shows_not_enough_data_and_no_bezirk_chart(tmp_path):
     assert not _find_all(article, "svg"), "no bezirk chart should render below the 14-full-day minimum"
 
 
-def _figure_html(html: str, article_id: str) -> str:
-    start = html.index(f'<article id="{article_id}">')
-    figure = html[html.index("<figure>", start) :]
-    return figure[: figure.index("</figure>")]
-
-
-def _label_fits(headline, text, axes) -> bool:
-    """Both label lines (name, then value) stay inside the plot box."""
-    width = max(len(line) for line in text.split()[:1] + [" ".join(text.split()[1:])]) * 0.55 * CHART_FONT_SIZE
-    x = headline.label_x
-    lo, hi = {"start": (x, x + width), "end": (x - width, x), "middle": (x - width / 2, x + width / 2)}[headline.anchor]
-    return axes.left <= lo and hi <= axes.right + 1
-
-
 def test_cycle_dasharray_differs_when_colors_repeat():
     pairs = {(i % 7, cycle_dasharray(i)) for i in range(14)}
     assert len(pairs) == 14
@@ -145,13 +135,13 @@ def test_bezirk_chart_has_axes_legend_and_headline(synthetic_data_dir, tmp_path,
     site_dir = tmp_path / "site"
     build_site(synthetic_data_dir, site_dir)
     html = (site_dir / name).read_text()
-    els = assert_axes_conventions(_figure_html(html, "bezirke"))
+    els = assert_axes_conventions(figure_html(html, "bezirke"))
     assert polyline_dasharrays(els) == ["none"] * len(BEZIRKE)  # one color cycle: colors alone differ
-    assert root_font_size(_figure_html(html, "bezirke")) == CHART_FONT_SIZE
+    assert root_font_size(figure_html(html, "bezirke")) == CHART_FONT_SIZE
     titles = [e["text"] for e in els if "axis-title-y" in e["classes"]]
     assert titles == ["Verfügbare Räder (Anzahl, Mo–Fr)" if lang == "de" else "Bikes available (count, Mon–Fri)"]
 
-    figure = _figure_html(html, "bezirke")
+    figure = figure_html(html, "bezirke")
     legend = figure[figure.index('class="chart-legend"') :]
     assert legend.count("swatch-line") == len(BEZIRKE)
     assert all(b in legend for b in BEZIRKE)
@@ -163,5 +153,5 @@ def test_bezirk_chart_has_axes_legend_and_headline(synthetic_data_dir, tmp_path,
     word = "Räder um" if lang == "de" else "bikes at"
     assert " ".join(label["text"].split()) == f"{bezirk} {value:.0f} {word} 8:00"
     chart = charts.bezirk_availability_chart(synthetic_data_dir)
-    assert chart.headline.name == bezirk and _label_fits(chart.headline, label["text"], chart.axes)
+    assert chart.headline.name == bezirk and label_fits(chart.headline, label["text"], chart.axes)
     assert chart.axes.y_min <= min(v for v in expected.values()) and chart.axes.y_max >= max(expected.values())
