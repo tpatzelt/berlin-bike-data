@@ -141,3 +141,64 @@ def test_css_has_no_fixed_px_widths_outside_media_queries(empty_site):
     css_text = (empty_site / "site.css").read_text()
     stripped = _strip_media_blocks(css_text)
     assert not re.search(r"\bwidth\s*:\s*\d+px", stripped)
+
+
+_COLOR_LITERAL = re.compile(
+    r"#[0-9a-fA-F]{3,8}\b|\b(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\(", re.I
+)
+_NAMED_COLORS = re.compile(
+    r"(?<![\w-])(?:white|black|red|green|blue|gray|grey|silver|orange|yellow|purple|pink|"
+    r"brown|navy|teal|cyan|magenta|lime|maroon|olive|aqua|fuchsia|gold|transparent)(?![\w-])",
+    re.I,
+)
+
+
+def _css_blocks(css_text: str) -> tuple[str, str, str]:
+    """Return (light :root body, dark :root body, css with both blocks removed)."""
+    root = re.search(r":root\s*{([^}]*)}", css_text)
+    dark = re.search(
+        r"@media\s*\(prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}\s*}", css_text
+    )
+    assert root and dark
+    rest = css_text.replace(dark.group(0), "").replace(root.group(0), "")
+    return root.group(1), dark.group(1), rest
+
+
+def _declarations(body: str) -> dict[str, str]:
+    return {
+        m.group(1): m.group(2).strip() for m in re.finditer(r"(--[\w-]+)\s*:\s*([^;]+);", body)
+    }
+
+
+def _site_css(empty_site) -> str:
+    path = empty_site / "site.css"
+    assert path.exists()
+    return path.read_text()
+
+
+def test_root_declares_color_spacing_type_radius_and_font_tokens(empty_site):
+    light, _, _ = _css_blocks(_site_css(empty_site))
+    decls = _declarations(light)
+    for prefix in ("--space-", "--step-", "--radius-"):
+        assert [n for n in decls if n.startswith(prefix)], prefix
+    assert len([n for n in decls if n.startswith("--space-")]) >= 6
+    assert "--font-body" in decls and "system-ui" in decls["--font-body"]
+    assert "url(" not in decls["--font-body"]
+    for token in ("--surface", "--border", *TOKENS):
+        assert token in decls
+
+
+def test_dark_block_redefines_exactly_the_color_tokens(empty_site):
+    light, dark, _ = _css_blocks(_site_css(empty_site))
+    light_colors = {n for n, v in _declarations(light).items() if _COLOR_LITERAL.search(v)}
+    dark_decls = _declarations(dark)
+    assert len(light_colors) >= 10
+    assert set(dark_decls) == light_colors
+    assert all(_COLOR_LITERAL.search(v) for v in dark_decls.values())
+
+
+def test_no_color_literal_outside_root_blocks(empty_site):
+    _, _, rest = _css_blocks(_site_css(empty_site))
+    assert "{" in rest  # the rules are still there
+    assert not _COLOR_LITERAL.findall(rest)
+    assert not _NAMED_COLORS.findall(rest)
