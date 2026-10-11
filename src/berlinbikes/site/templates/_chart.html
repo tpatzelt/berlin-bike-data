@@ -63,3 +63,10 @@
 </g>
 <text class="axis-title axis-title-x" x="{{ c.x_title_x }}" y="{{ c.x_title_y }}" text-anchor="middle">{{ x_title }}</text>
 {% endmacro %}
+
+{# The designed "not enough data yet" state: a message plus progress toward the required full days. #}
+{% macro not_enough_data(days, needed) %}
+<p class="not-enough-data"><span class="ned-title">{{ t("common.not_enough_data") }}</span>
+<progress value="{{ days }}" max="{{ needed }}">{{ days }}/{{ needed }}</progress>
+<span class="ned-count">{{ t("common.days_collected", days=days, needed=needed) }}</span></p>
+{% endmacro %}

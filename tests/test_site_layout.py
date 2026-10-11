@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+from pathlib import Path
 from html.parser import HTMLParser
 
 import pytest
@@ -274,3 +275,22 @@ def test_header_is_styled_and_footer_is_quiet(layout_site):
     css_text = (layout_site / "site.css").read_text()
     assert re.search(r"\.site-header\s*{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap", css_text)
     assert re.search(r"footer\s*{[^}]*color:\s*var\(--muted\)", css_text)
+
+
+def test_not_enough_data_component_shows_progress_and_day_count(empty_site):
+    for name, count in (("index.html", "0/14 Tage gesammelt"), ("index.en.html", "0/14 days collected")):
+        html = (empty_site / name).read_text()
+        blocks = re.findall(r'<p class="not-enough-data">(.*?)</p>', html, re.S)
+        # the weather "missing label" message is a different state without progress
+        blocks = [b for b in blocks if "<progress" in b]
+        assert len(blocks) == 6, name
+        for block in blocks:
+            assert re.search(r'<progress value="0" max="14">', block)
+            assert count in block
+
+
+def test_not_enough_data_css_has_no_border_box():
+    css = (Path(__file__).parent.parent / "src/berlinbikes/site/static/site.css").read_text()
+    rule = re.search(r"\.not-enough-data \{([^}]*)\}", css)
+    assert rule and "border:" not in rule.group(1)
+    assert "progress" in css

@@ -101,7 +101,21 @@ footer a { color: var(--muted); margin-right: var(--space-4); }
 
 a { color: var(--accent); }
 
-.not-enough-data { border: 1px solid var(--border); padding: var(--space-4); }
+.not-enough-data { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); background: var(--surface); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); }
+
+.not-enough-data[hidden] { display: none; }
+
+.not-enough-data .ned-title { font-weight: 600; }
+
+.not-enough-data .ned-count { font-size: var(--step--1); color: var(--muted); }
+
+.not-enough-data progress { flex: 1 1 8rem; max-width: 16rem; height: 0.5rem; appearance: none; border: 0; border-radius: var(--radius-md); background: var(--border); accent-color: var(--accent); overflow: hidden; }
+
+.not-enough-data progress::-webkit-progress-bar { background: var(--border); }
+
+.not-enough-data progress::-webkit-progress-value { background: var(--accent); }
+
+.not-enough-data progress::-moz-progress-bar { background: var(--accent); }
 
 figure { margin: var(--space-4) 0; }
 

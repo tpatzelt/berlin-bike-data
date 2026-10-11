@@ -130,7 +130,7 @@ def test_map_pages_are_single_language(map_site):
 def test_map_i18n_json_is_per_language_and_complete(map_site):
     de = json.loads(_collect(map_site / "map.html").i18n_json)
     en = json.loads(_collect(map_site / "map.en.html").i18n_json)
-    assert set(de) == set(en) == {"days", "ortsteil_title", "not_enough_data", "load_error"}
+    assert set(de) == set(en) == {"days", "ortsteil_title", "not_enough_data", "days_collected", "load_error"}
     assert de["days"] == "({n} Tage)" and en["days"] == "({n} days)"
     assert de["load_error"].startswith("Daten") and en["load_error"].startswith("Could not")
     assert en["ortsteil_title"] == "District {name}"
