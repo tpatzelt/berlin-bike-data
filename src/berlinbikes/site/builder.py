@@ -18,11 +18,13 @@ from berlinbikes.site.charts import (
     bezirk_availability_chart,
     flow_chart,
     footprint_chart,
+    MAP_DEFAULT_HOUR,
+    map_profile_chart,
     shortage_chart,
     weather_effect_chart,
 )
 from berlinbikes.site.i18n import LANGS, t
-from berlinbikes.site.profiles import write_profiles_json
+from berlinbikes.site.profiles import profiles_payload, write_profiles_json
 from berlinbikes.site.sources import DATA_SOURCES
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -57,7 +59,13 @@ def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, s
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    map_payload = profiles_payload(data_dir)
+    map_default = map_payload["stations"][0] if map_payload["status"] == "ok" and map_payload["stations"] else None
     context = {
+        "map_payload": map_payload,
+        "map_default": map_default,
+        "map_default_hour": MAP_DEFAULT_HOUR,
+        "map_chart": map_profile_chart(map_default["curve"]) if map_default else None,
         "availability_chart": availability_chart(Path(data_dir)),
         "bezirk_availability_chart": bezirk_availability_chart(Path(data_dir)),
         "flow_chart": flow_chart(Path(data_dir)),

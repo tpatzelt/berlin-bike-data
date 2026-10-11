@@ -5,7 +5,6 @@
   "use strict";
 
   var SVG_NS = "http://www.w3.org/2000/svg";
-  var W = 480, H = 200, PAD_L = 32, PAD_R = 8, PAD_T = 8, PAD_B = 24;
 
   var state = { data: null, curve: null, title: "", markers: {}, selected: null };
 
@@ -31,56 +30,63 @@
     return o;
   }
 
+  function fillSelect(select, options) {
+    while (select.options.length > 1) select.remove(1);  // keep the "–" placeholder
+    options.forEach(function (o) { select.appendChild(o); });
+  }
+
   function showStatus(message) {
     var status = $("map-status");
     status.textContent = message;
     status.hidden = false;
   }
 
-  function showNotEnoughData(have, needed) {
-    var status = $("map-status");
-    var title = document.createElement("span");
-    title.className = "ned-title";
-    title.textContent = I18N.not_enough_data;
-    var bar = document.createElement("progress");
-    bar.max = needed;
-    bar.value = have;
-    bar.textContent = have + "/" + needed;
-    var count = document.createElement("span");
-    count.className = "ned-count";
-    count.textContent = I18N.days_collected.replace("{days}", have).replace("{needed}", needed);
-    status.textContent = "";
-    status.append(title, " ", bar, " ", count);
-    status.hidden = false;
-  }
-
   function render() {
     var svg = $("profile-chart");
+    if (!svg) return;
     var tbody = document.querySelector("#profile-table tbody");
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
     $("profile-title").textContent = state.title;
     if (!state.curve) return;
 
+    var box = svg.viewBox.baseVal;
+    var H = box.height, PAD_L = I18N.plot.left, PAD_T = I18N.plot.top, bottom = I18N.plot.bottom, right = I18N.plot.right;
     var weekday = Number($("pick-weekday").value);
     var values = state.curve[weekday];
-    var max = Math.max(1, Math.max.apply(null, values.map(function (v) { return v || 0; })));
-    var x = function (h) { return PAD_L + (h / 23) * (W - PAD_L - PAD_R); };
-    var y = function (v) { return PAD_T + (1 - v / max) * (H - PAD_T - PAD_B); };
+    var max = Math.max(1, Math.ceil(Math.max.apply(null, values.map(function (v) { return v || 0; }))));
+    var x = function (h) { return PAD_L + (h / 23) * (right - PAD_L); };
+    var y = function (v) { return bottom - (v / max) * (bottom - PAD_T); };
 
-    svg.appendChild(el("line", { x1: PAD_L, y1: y(0), x2: W - PAD_R, y2: y(0), stroke: cssVar("--muted") }));
-    [0, 6, 12, 18, 23].forEach(function (h) {
-      svg.appendChild(el("text", { x: x(h), y: H - 6, "text-anchor": "middle", "font-size": 11, fill: cssVar("--fg") }, String(h)));
+    var grid = el("g", { "class": "grid-lines" });
+    var xAxis = el("g", { "class": "axis axis-x" });
+    var yAxis = el("g", { "class": "axis axis-y" });
+    [0, max / 2, max].forEach(function (v) {
+      grid.appendChild(el("line", { "class": "grid", x1: PAD_L, x2: right, y1: y(v), y2: y(v) }));
+      yAxis.appendChild(el("text", { "class": "tick", x: PAD_L - 6, y: y(v) + 5, "text-anchor": "end" }, String(Math.round(v * 10) / 10)));
     });
-    svg.appendChild(el("text", { x: PAD_L - 4, y: y(max) + 4, "text-anchor": "end", "font-size": 11, fill: cssVar("--fg") }, String(Math.round(max))));
-    svg.appendChild(el("text", { x: PAD_L - 4, y: y(0), "text-anchor": "end", "font-size": 11, fill: cssVar("--fg") }, "0"));
+    [0, 4, 8, 12, 16, 20, 23].forEach(function (h) {
+      grid.appendChild(el("line", { "class": "grid", x1: x(h), x2: x(h), y1: PAD_T, y2: bottom }));
+      xAxis.appendChild(el("text", { "class": "tick", x: x(h), y: bottom + 20, "text-anchor": "middle" }, String(h)));
+    });
+    svg.append(grid, xAxis, yAxis);
+    var yTitleX = Number(svg.getAttribute("font-size")), yTitleY = (PAD_T + bottom) / 2;
+    svg.appendChild(el("text", { "class": "axis-title axis-title-x", x: (PAD_L + right) / 2, y: H - 6, "text-anchor": "middle" }, I18N.axis_x));
+    svg.appendChild(el("text", { "class": "axis-title axis-title-y", x: yTitleX, y: yTitleY, "text-anchor": "middle",
+      transform: "rotate(-90 " + yTitleX + " " + yTitleY + ")" }, I18N.axis_y));
 
     var points = [];
     values.forEach(function (v, h) { if (v !== null) points.push(x(h) + "," + y(v)); });
-    svg.appendChild(el("polyline", { points: points.join(" "), fill: "none", stroke: cssVar("--accent"), "stroke-width": 2.5 }));
-    var at8 = values[8];
-    if (at8 !== null) {
-      svg.appendChild(el("circle", { cx: x(8), cy: y(at8), r: 4, fill: cssVar("--accent") }));
+    svg.appendChild(el("polyline", { points: points.join(" "), fill: "none", stroke: "var(--accent)", "stroke-width": 2.5 }));
+    var atHour = values[I18N.hour];
+    if (atHour !== null) {
+      var head = el("g", { "class": "headline" });
+      var anchorStart = x(I18N.hour) < (PAD_L + right) / 2;
+      head.appendChild(el("circle", { cx: x(I18N.hour), cy: y(atHour), r: 5 }));
+      head.appendChild(el("text", { x: x(I18N.hour) + (anchorStart ? 10 : -10), y: Math.min(y(atHour) + 22, bottom - 4),
+        "text-anchor": anchorStart ? "start" : "end" },
+        I18N.headline.replace("{value}", Math.round(atHour)).replace("{hour}", I18N.hour)));
+      svg.appendChild(head);
     }
     svg.setAttribute("aria-label", state.title + ": " + values.map(function (v, h) {
       return h + ":00 " + (v === null ? "–" : v);
@@ -149,12 +155,12 @@
   function init(data) {
     state.data = data;
     if (data.status !== "ok") {
-      showNotEnoughData(data.full_days, data.min_full_days);
-      return;
+      return;  // the server already rendered the not-enough-data state
     }
     $("profile-days").textContent = I18N.days.replace("{n}", data.full_days);
-    data.stations.forEach(function (s) { $("pick-station").appendChild(option(s.id, s.name)); });
-    data.ortsteile.forEach(function (o) { $("pick-ortsteil").appendChild(option(o.name, o.name)); });
+    // The server pre-fills these selects; rebuild them so no option appears twice.
+    fillSelect($("pick-station"), data.stations.map(function (s) { return option(s.id, s.name || s.id); }));
+    fillSelect($("pick-ortsteil"), data.ortsteile.map(function (o) { return option(o.name, o.name); }));
     $("pick-station").addEventListener("change", function (e) { pickStation(e.target.value); });
     $("pick-ortsteil").addEventListener("change", function (e) { pickOrtsteil(e.target.value); });
     $("pick-weekday").addEventListener("change", render);

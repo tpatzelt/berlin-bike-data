@@ -8,28 +8,35 @@
 <script src="map.js" defer></script>
 {% endblock %}
 {% block content %}
+{% import "_chart.html" as chart with context %}
 <h2>{{ t("map.heading") }}</h2>
 <p>{{ t("map.intro") }}</p>
 <noscript>
 <p class="not-enough-data">{{ t("map.noscript", link='<a href="data/profiles.json">profiles.json</a>'|safe) }}</p>
 </noscript>
 <script type="application/json" id="map-i18n">{{ {
+  "hour": map_default_hour,
+  "plot": {"left": map_chart.axes.left, "right": map_chart.axes.right, "top": map_chart.axes.top, "bottom": map_chart.axes.bottom} if map_chart else none,
   "days": t("map.days", n="{n}"),
   "ortsteil_title": t("map.ortsteil_title", name="{name}"),
-  "not_enough_data": t("map.not_enough_data"),
-  "days_collected": t("map.days_collected", days="{days}", needed="{needed}"),
-  "load_error": t("map.load_error")
+  "load_error": t("map.load_error"),
+  "axis_x": t("map.axis.x"),
+  "axis_y": t("map.axis.y"),
+  "headline": t("map.headline", value="{value}", hour="{hour}")
 } | tojson }}</script>
 <p id="map-status" class="not-enough-data" hidden></p>
-<div id="map" class="map" aria-label="{{ t("map.aria") }}"></div>
 <form class="map-controls" onsubmit="return false">
 <p>
 <label for="pick-station">{{ t("map.label.station") }}</label>
-<select id="pick-station"><option value="">–</option></select>
+<select id="pick-station"><option value="">–</option>
+{% if map_default %}{% for s in map_payload.stations %}<option value="{{ s.id }}"{% if s.id == map_default.id %} selected{% endif %}>{{ s.name or s.id }}</option>
+{% endfor %}{% endif %}</select>
 </p>
 <p>
 <label for="pick-ortsteil">{{ t("map.label.ortsteil") }}</label>
-<select id="pick-ortsteil"><option value="">–</option></select>
+<select id="pick-ortsteil"><option value="">–</option>
+{% if map_default %}{% for o in map_payload.ortsteile %}<option value="{{ o.name }}">{{ o.name }}</option>
+{% endfor %}{% endif %}</select>
 </p>
 <p>
 <label for="pick-weekday">{{ t("map.label.weekday") }}</label>
@@ -38,21 +45,40 @@
 {% endfor %}</select>
 </p>
 </form>
-<figure>
-<h3 id="profile-title"></h3>
-<svg id="profile-chart" class="chart" viewBox="0 0 480 200" role="img" aria-label="{{ t("map.chart.aria") }}"></svg>
+<div class="map-layout">
+<div id="map" class="map" aria-label="{{ t("map.aria") }}"></div>
+<div class="map-detail">
+{% if map_chart %}
+<figure class="map-profile">
+<h3 id="profile-title">{{ map_default.name or map_default.id }}{% if map_default.ortsteil %} ({{ map_default.ortsteil }}){% endif %}</h3>
+<svg id="profile-chart" class="chart" viewBox="{{ map_chart.view_box }}" font-size="{{ map_chart.axes.font_size }}" role="img" aria-label="{{ t("map.chart.aria") }}">
+{{ chart.axes_frame(map_chart.axes, t("map.axis.x"), t("map.axis.y")) }}
+<polyline points="{{ map_chart.points }}" fill="none" stroke="var(--accent)" stroke-width="2.5"></polyline>
+{% if map_chart.headline %}
+{{ chart.headline(map_chart.headline, t("map.headline", value="%.0f"|format(map_chart.headline.value), hour=map_chart.headline.hour)) }}
+{% endif %}
+</svg>
 <figcaption>
 {{ t("map.caption") }}
-<span id="profile-days"></span>
+<span id="profile-days">{{ t("map.days", n=map_payload.full_days) }}</span>
 </figcaption>
 </figure>
-<details open>
+<details open class="map-table">
 <summary>{{ t("map.table.summary") }}</summary>
 <table id="profile-table">
 <caption>{{ t("map.table.caption") }}</caption>
 <thead><tr><th scope="col">{{ t("map.table.hour") }}</th><th scope="col">{{ t("map.table.bikes") }}</th></tr></thead>
-<tbody></tbody>
+<tbody>
+{% for value in map_chart.hours %}
+<tr><th scope="row">{{ loop.index0 }}:00</th><td>{{ "–" if value is none else value }}</td></tr>
+{% endfor %}
+</tbody>
 </table>
 </details>
+{% else %}
+{{ chart.not_enough_data(map_payload.full_days, map_payload.min_full_days) }}
+{% endif %}
+</div>
+</div>
 <p class="map-credit">{{ t("map.credit") }} © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></p>
 {% endblock %}

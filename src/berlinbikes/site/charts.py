@@ -1075,3 +1075,37 @@ def footprint_chart(data_dir: str | Path) -> FootprintChart:
         headline=headline,
         segment_labels=_segment_labels(axes, latest),
     )
+
+
+#: Hour marked on the map page's profile curve (the visitor's "8:00" question).
+MAP_DEFAULT_HOUR = 8
+#: Weekday (Monday = 0) the map page shows before the visitor picks one.
+MAP_DEFAULT_WEEKDAY = 0
+
+
+@dataclass(frozen=True)
+class MapProfileChart:
+    """One station's or Ortsteil's curve for one weekday, drawn with the shared axes."""
+
+    view_box: str
+    axes: Axes
+    points: str
+    hours: list[float | None]
+    headline: Headline | None
+
+
+def map_profile_chart(
+    curve: list[list[float | None]], weekday: int = MAP_DEFAULT_WEEKDAY, hour: int = MAP_DEFAULT_HOUR
+) -> MapProfileChart:
+    """The map page's server-rendered curve: ``curve`` is 7 weekday lists of 24 hourly means (or None)."""
+    hours = list(curve[weekday])
+    present = [v for v in hours if v is not None]
+    axes = build_axes(0, max([1.0, *present]))
+    points = " ".join(
+        f"{axes.left + h / 23 * (axes.right - axes.left):.1f},{axes.scale_y(v):.1f}"
+        for h, v in enumerate(hours)
+        if v is not None
+    )
+    value = hours[hour]
+    headline = _make_headline(axes, value, hour) if value is not None else None
+    return MapProfileChart(view_box=axes.view_box, axes=axes, points=points, hours=hours, headline=headline)
