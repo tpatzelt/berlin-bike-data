@@ -13,9 +13,14 @@ from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.profiles import station_profiles
 from berlinbikes.site import build_site
-from berlinbikes.site.charts import CHART_FONT_SIZE, MAP_DEFAULT_HOUR, map_profile_chart
+from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH, MAP_DEFAULT_HOUR, map_profile_chart
 from berlinbikes.site.profiles import profiles_payload
-from tests.helpers.svg import assert_axes_conventions, chart_elements
+from tests.helpers.svg import (
+    assert_axes_conventions,
+    assert_no_overlaps_and_inside,
+    chart_elements,
+    text_boxes,
+)
 from tests.synthetic import EMPTY_STATION_ID
 
 
@@ -229,6 +234,18 @@ def test_map_page_without_js_has_options_curve_and_table(map_site, synthetic_dat
     figure = html[html.index('<svg id="profile-chart"') :]
     assert chart_elements(figure)[0]["attrs"]["id"] == "profile-chart"
     assert f"{MAP_DEFAULT_HOUR}:00" in next(e["text"] for e in els if e["tag"] == "text" and "headline" in e["groups"])
+
+
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_map_chart_text_boxes_do_not_overlap(map_site, page):
+    html = (map_site / page).read_text()
+    start = html.index('<svg id="profile-chart"')
+    tag = html[start : html.index(">", start)]
+    width, height = (float(v) for v in re.search(r'viewBox="([^"]+)"', tag).group(1).split()[2:])
+    boxes = text_boxes(chart_elements(html[start:]), CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH)
+    assert len(boxes) > 10
+    assert any(f"{MAP_DEFAULT_HOUR}:00" in b[0] for b in boxes)
+    assert_no_overlaps_and_inside(boxes, width, height)
 
 
 def test_map_profile_chart_marks_the_hour_on_g2_axes():
