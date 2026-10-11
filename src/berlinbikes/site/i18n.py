@@ -248,6 +248,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "map.weekday.3": {"de": "Donnerstag", "en": "Thursday"},
     "map.weekday.4": {"de": "Freitag", "en": "Friday"},
     "map.weekday.5": {"de": "Samstag", "en": "Saturday"},
+    "methodology.h1": {
+        "de": "Methodik: So entstehen die Zahlen",
+        "en": "Methodology: how the numbers are made",
+    },
     "methodology.h2": {
         "de": "Methodik",
         "en": "Methodology",
