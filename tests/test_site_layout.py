@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 import pytest
 
 from berlinbikes.analysis import MIN_FULL_DAYS
-from berlinbikes.site import PAGES, build_site
+from berlinbikes.site import PAGES, build_site, i18n
 
 TOKENS = ("--bg", "--fg", "--accent", "--muted")
 
@@ -285,15 +285,18 @@ def test_header_is_styled_and_footer_is_quiet(layout_site):
 
 
 def test_not_enough_data_component_shows_progress_and_day_count(empty_site):
-    for name, count in (("index.html", "0/14 Tage gesammelt"), ("index.en.html", "0/14 days collected")):
+    for name, lang in (("index.html", "de"), ("index.en.html", "en")):
+        count = i18n.t("common.days_collected", lang, days=0, needed=MIN_FULL_DAYS)
         html = (empty_site / name).read_text()
         blocks = re.findall(r'<p class="not-enough-data">(.*?)</p>', html, re.S)
         # the weather "missing label" message is a different state without progress
         blocks = [b for b in blocks if "<progress" in b]
         assert len(blocks) == 6, name
         for block in blocks:
-            assert f'<progress value="0" max="{MIN_FULL_DAYS}">' in block
-            assert count in block
+            assert f'<progress value="0" max="{MIN_FULL_DAYS}"' in block
+            assert f'<span class="ned-count" aria-hidden="true">{count}</span>' in block
+            # the visible count is hidden from screen readers; the progress carries it once as its label
+            assert f'aria-label="{count}"' in block
 
 
 def test_synthetic_site_has_no_progress_element(synthetic_site):
@@ -307,4 +310,4 @@ def test_not_enough_data_css_has_no_border_box():
     css = (Path(__file__).parent.parent / "src/berlinbikes/site/static/site.css").read_text()
     rule = re.search(r"\.not-enough-data \{([^}]*)\}", css)
     assert rule and "border:" not in rule.group(1)
-    assert "progress" in css
+    assert re.search(r"\.not-enough-data progress \{[^}]*\}", css)
