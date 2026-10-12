@@ -284,19 +284,75 @@ def test_header_is_styled_and_footer_is_quiet(layout_site):
     assert re.search(r"footer\s*{[^}]*color:\s*var\(--muted\)", css_text)
 
 
+class _NotEnoughDataParser(HTMLParser):
+    """Collects each p.not-enough-data: its progress attributes and ned-count span."""
+
+    def __init__(self):
+        super().__init__()
+        self.blocks = []
+        self._block = None
+        self._in_count = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        classes = (attrs.get("class") or "").split()
+        if tag == "p" and "not-enough-data" in classes:
+            self._block = {"progress": None, "count_text": None, "count_hidden": None}
+            self.blocks.append(self._block)
+        elif self._block is None:
+            return
+        elif tag == "progress":
+            self._block["progress"] = {k: attrs.get(k) for k in ("value", "max", "aria-label")}
+        elif tag == "span" and "ned-count" in classes:
+            self._in_count = True
+            self._block["count_text"] = ""
+            self._block["count_hidden"] = attrs.get("aria-hidden")
+
+    def handle_endtag(self, tag):
+        if tag == "span":
+            self._in_count = False
+        elif tag == "p":
+            self._block = None
+
+    def handle_data(self, data):
+        if self._in_count:
+            self._block["count_text"] += data
+
+
+def _not_enough_data_blocks(html):
+    parser = _NotEnoughDataParser()
+    parser.feed(html)
+    # the weather "missing label" message is a different state without progress
+    return [b for b in parser.blocks if b["progress"] is not None]
+
+
+def test_not_enough_data_parser_reads_reordered_attributes():
+    html = (
+        '<p class="x not-enough-data"><progress aria-label="L" max="9" value="0">0/9</progress>'
+        '<span aria-hidden="true" class="a ned-count">L</span></p>'
+        '<p class="not-enough-data">no progress here</p>'
+    )
+    assert _not_enough_data_blocks(html) == [
+        {
+            "progress": {"value": "0", "max": "9", "aria-label": "L"},
+            "count_text": "L",
+            "count_hidden": "true",
+        }
+    ]
+
+
 def test_not_enough_data_component_shows_progress_and_day_count(empty_site):
     for name, lang in (("index.html", "de"), ("index.en.html", "en")):
         count = i18n.t("common.days_collected", lang, days=0, needed=MIN_FULL_DAYS)
-        html = (empty_site / name).read_text()
-        blocks = re.findall(r'<p class="not-enough-data">(.*?)</p>', html, re.S)
-        # the weather "missing label" message is a different state without progress
-        blocks = [b for b in blocks if "<progress" in b]
+        blocks = _not_enough_data_blocks((empty_site / name).read_text())
         assert len(blocks) == 6, name
         for block in blocks:
-            assert f'<progress value="0" max="{MIN_FULL_DAYS}"' in block
-            assert f'<span class="ned-count" aria-hidden="true">{count}</span>' in block
-            # the visible count is hidden from screen readers; the progress carries it once as its label
-            assert f'aria-label="{count}"' in block
+            assert block["progress"]["value"] == "0", name
+            assert block["progress"]["max"] == str(MIN_FULL_DAYS), name
+            # the visible count is hidden from screen readers; the progress carries it once
+            assert block["progress"]["aria-label"] == count, name
+            assert block["count_hidden"] == "true", name
+            assert block["count_text"] == count, name
 
 
 def test_synthetic_site_has_no_progress_element(synthetic_site):
