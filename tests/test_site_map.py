@@ -400,6 +400,8 @@ class _StationOptions(HTMLParser):
         super().__init__()
         self.datalist: list[str] = []
         self.select_texts: list[str] = []
+        self.selected: list[tuple[str, str]] = []
+        self._selected_value: str | None = None
         self._where = None
         self._text: list[str] = []
 
@@ -413,6 +415,7 @@ class _StationOptions(HTMLParser):
             self.datalist.append(a["value"])
         elif tag == "option" and self._where == "select":
             self._text = []
+            self._selected_value = a.get("value", "") if "selected" in a else None
 
     def handle_data(self, data):
         if self._where == "select":
@@ -421,6 +424,9 @@ class _StationOptions(HTMLParser):
     def handle_endtag(self, tag):
         if tag == "option" and self._where == "select":
             self.select_texts.append("".join(self._text))
+            if self._selected_value is not None:
+                self.selected.append((self._selected_value, "".join(self._text).strip()))
+                self._selected_value = None
         elif tag in ("select", "datalist"):
             self._where = None
 
@@ -489,10 +495,12 @@ def test_no_js_profile_title_is_the_default_stations_profiles_json_label(map_sit
     assert payload["stations"]
     default = payload["stations"][0]
     assert default["label"]
+    html = (map_site / page).read_text()
     parsed = _ProfileTitle()
-    parsed.feed((map_site / page).read_text())
+    parsed.feed(html)
     assert parsed.titles == [default["label"]]
     # the default station is the one preselected in the no-JS select
     select = _StationOptions()
-    select.feed((map_site / page).read_text())
-    assert select.select_texts[1] == parsed.titles[0]
+    select.feed(html)
+    assert len(select.selected) == 1
+    assert select.selected[0] == (default["id"], default["label"])
