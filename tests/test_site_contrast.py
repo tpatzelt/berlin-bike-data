@@ -71,10 +71,11 @@ def test_marker_opacity_matches_the_code():
     assert f"fillOpacity: {MARKER_OPACITY}" in (SITE_DIR / "static" / "map.js").read_text()
 
 
-@pytest.mark.parametrize("block", range(2), ids=["light", "dark"])
-def test_series_token_count_matches_charts_constant(block):
+@pytest.mark.parametrize("mode", ["light", "dark"])
+def test_series_token_count_matches_charts_constant(mode):
     # Count in the raw block: MODES['dark'] merges the light tokens in, hiding a dropped dark token.
-    declared = re.findall(r"(--series-\d+)\s*:", css_raw_token_blocks(CSS)[block])
+    light, dark = css_raw_token_blocks(CSS)
+    declared = re.findall(r"(--series-\d+)\s*:", {"light": light, "dark": dark}[mode])
     assert len(declared) == SERIES_COLOR_COUNT, declared
 
 
