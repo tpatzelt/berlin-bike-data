@@ -9,16 +9,16 @@
 <p>{{ t("methodology.p.flow") }}</p>
 <p>{{ t("methodology.p.weather", rain_mm=rain_mm_threshold, cold_c=cold_c_threshold) }}</p>
 <h2>{{ t("methodology.h2") }}</h2>
-<table class="sources-table">
-<thead>
-<tr><th>{{ t("methodology.col.source") }}</th><th>{{ t("methodology.col.used_for") }}</th><th>{{ t("methodology.col.license") }}</th></tr>
+<table class="sources-table" role="table">
+<thead role="rowgroup">
+<tr role="row"><th role="columnheader">{{ t("methodology.col.source") }}</th><th role="columnheader">{{ t("methodology.col.used_for") }}</th><th role="columnheader">{{ t("methodology.col.license") }}</th></tr>
 </thead>
-<tbody>
+<tbody role="rowgroup">
 {% for source in data_sources %}
-<tr>
-<td data-label="{{ t('methodology.col.source') }}">{{ source.name }} (<span class="source-url">{{ source.url }}</span>{% set url_note = source.url_note_de if lang == "de" else source.url_note_en %}{% if url_note %}, {{ url_note }}{% endif %})</td>
-<td data-label="{{ t('methodology.col.used_for') }}">{{ source.used_for_de if lang == "de" else source.used_for_en }}</td>
-<td data-label="{{ t('methodology.col.license') }}">{{ source.license_de if lang == "de" else source.license_en }}</td>
+<tr role="row">
+<td role="cell" data-label="{{ t('methodology.col.source') }}">{{ source.name }} (<span class="source-url">{{ source.url }}</span>{% set url_note = source.url_note_de if lang == "de" else source.url_note_en %}{% if url_note %}, {{ url_note }}{% endif %})</td>
+<td role="cell" data-label="{{ t('methodology.col.used_for') }}">{{ source.used_for_de if lang == "de" else source.used_for_en }}</td>
+<td role="cell" data-label="{{ t('methodology.col.license') }}">{{ source.license_de if lang == "de" else source.license_en }}</td>
 </tr>
 {% endfor %}
 </tbody>
