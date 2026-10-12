@@ -142,7 +142,7 @@ def test_t_formats_placeholders_and_escapes():
 
 
 class _ArticleLangs(HTMLParser):
-    """Collect ``lang`` attributes of elements inside each ``<article id=...>``."""
+    """Collect ``lang`` attrs and h2 text (minus anchor text) per ``<article id=...>``."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -205,7 +205,9 @@ def test_all_six_articles_are_single_language(which, name, site, synthetic_site_
     assert lang in ("de", "en")
     for article in p.article_ids:
         assert p.h2[article] == [STRINGS[f"{article}.heading"][lang]]
-        assert STRINGS[f"{article}.heading"][other] not in p.h2[article]
+        # Identical de/en headings cannot be told apart, so the check would be vacuous.
+        if STRINGS[f"{article}.heading"][other] != STRINGS[f"{article}.heading"][lang]:
+            assert STRINGS[f"{article}.heading"][other] not in " ".join(p.h2[article])
 
 
 class _ColumnHeaders(HTMLParser):
@@ -237,7 +239,9 @@ def test_column_headers_come_from_catalog(name, lang, synthetic_site_dir):
     p = _ColumnHeaders()
     p.feed((synthetic_site_dir / name).read_text())
     assert p.headers
-    catalog = {v[lang] for v in STRINGS.values()}
+    # Map pages are pinned by the exact-list check below, which makes this loop redundant there.
+    prefix_ok = (lambda k: True) if name.startswith("map") else (lambda k: not k.startswith("map."))
+    catalog = {v[lang] for k, v in STRINGS.items() if prefix_ok(k)}
     for header in p.headers:
         is_hour = header.removesuffix(":00").isdigit()
         assert is_hour or header in catalog, header
