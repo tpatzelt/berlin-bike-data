@@ -229,8 +229,11 @@ class _ColumnHeaders(HTMLParser):
             self.headers[-1] += data
 
 
-@pytest.mark.parametrize("name,lang", (("index.html", "de"), ("index.en.html", "en")))
-def test_index_column_headers_come_from_catalog(name, lang, synthetic_site_dir):
+@pytest.mark.parametrize(
+    "name,lang",
+    (("index.html", "de"), ("index.en.html", "en"), ("map.html", "de"), ("map.en.html", "en")),
+)
+def test_column_headers_come_from_catalog(name, lang, synthetic_site_dir):
     p = _ColumnHeaders()
     p.feed((synthetic_site_dir / name).read_text())
     assert p.headers
@@ -238,6 +241,9 @@ def test_index_column_headers_come_from_catalog(name, lang, synthetic_site_dir):
     for header in p.headers:
         is_hour = header.removesuffix(":00").isdigit()
         assert is_hour or header in catalog, header
+    if name.startswith("map"):
+        want = [STRINGS["map.table.hour"][lang], STRINGS["map.table.bikes"][lang]]
+        assert p.headers == want
 
 
 def test_strings_has_no_duplicate_keys():
