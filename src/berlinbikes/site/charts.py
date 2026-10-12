@@ -574,7 +574,7 @@ def _bar_view_height(n: int) -> float:
     return _BAR_PAD_TOP + _BAR_PAD_BOTTOM + n * _BAR_HEIGHT + (n - 1) * _BAR_GAP
 
 
-def _station_label(station_id: str, ortsteil: str) -> str:
+def _bar_station_label(station_id: str, ortsteil: str) -> str:
     """``id (ortsteil)``, cut with an ellipsis to fit the label column; the table has the full text."""
     label = f"{station_id} ({ortsteil})"
     return label if len(label) <= _BAR_LABEL_CHARS else label[: _BAR_LABEL_CHARS - 1] + "…"
@@ -648,7 +648,7 @@ def shortage_chart(data_dir: str | Path) -> ShortageChart:
                 bar_height=_BAR_HEIGHT,
                 label_y=text_y,
                 value_x=left + bar_width + 4,
-                label=_station_label(station_id, ortsteil),
+                label=_bar_station_label(station_id, ortsteil),
                 label_x=left - 6,
                 is_top=i == top_index,
             )
