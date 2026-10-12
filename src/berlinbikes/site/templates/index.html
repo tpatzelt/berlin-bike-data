@@ -98,7 +98,7 @@
 <thead>
 <tr>
 <th scope="col">{{ t("common.table.station") }}</th>
-<th scope="col">Ortsteil</th>
+<th scope="col">{{ t("common.table.ortsteil") }}</th>
 <th scope="col">{{ t("common.table.min_per_day") }}</th>
 </tr>
 </thead>
@@ -145,7 +145,7 @@
 <caption>{{ t("bezirke.table.caption") }}</caption>
 <thead>
 <tr>
-<th scope="col">Bezirk</th>
+<th scope="col">{{ t("common.table.bezirk") }}</th>
 {% for hour in range(24) %}
 <th scope="col">{{ hour }}</th>
 {% endfor %}
@@ -196,7 +196,7 @@
 <caption>{{ t("flow.table.caption") }}</caption>
 <thead>
 <tr>
-<th scope="col">Bezirk</th>
+<th scope="col">{{ t("common.table.bezirk") }}</th>
 {% for hour in range(24) %}
 <th scope="col">{{ hour }}</th>
 {% endfor %}

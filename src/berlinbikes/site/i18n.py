@@ -34,6 +34,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "common.not_enough_data": {"de": "noch nicht genug Daten", "en": "not enough data yet"},
     "common.table.day": {"de": "Tag", "en": "Day"},
     "common.table.station": {"de": "Station", "en": "Station"},
+    "common.table.ortsteil": {"de": "Ortsteil", "en": "Ortsteil"},
+    "common.table.bezirk": {"de": "Bezirk", "en": "Bezirk"},
     "common.table.min_per_day": {"de": "Min./Tag", "en": "Min/day"},
     "weekday.short.0": {"de": "Mo", "en": "Mon"},
     "weekday.short.1": {"de": "Di", "en": "Tue"},

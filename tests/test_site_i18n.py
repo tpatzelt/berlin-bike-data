@@ -197,6 +197,38 @@ def test_all_six_articles_are_single_language(which, name, site, synthetic_site_
             assert mine in text.replace("&#39;", "'") and theirs not in text.replace("&#39;", "'")
 
 
+class _ColumnHeaders(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.headers: list[str] = []
+        self._depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "th" and dict(attrs).get("scope") == "col":
+            self._depth += 1
+            self.headers.append("")
+
+    def handle_endtag(self, tag):
+        if tag == "th" and self._depth:
+            self._depth -= 1
+            self.headers[-1] = self.headers[-1].strip()
+
+    def handle_data(self, data):
+        if self._depth:
+            self.headers[-1] += data
+
+
+@pytest.mark.parametrize("name,lang", (("index.html", "de"), ("index.en.html", "en")))
+def test_index_column_headers_come_from_catalog(name, lang, synthetic_site_dir):
+    p = _ColumnHeaders()
+    p.feed((synthetic_site_dir / name).read_text())
+    assert p.headers
+    catalog = {v[lang] for v in STRINGS.values()}
+    for header in p.headers:
+        is_hour = header.removesuffix(":00").isdigit()
+        assert is_hour or header in catalog, header
+
+
 def test_strings_has_no_duplicate_keys():
     import ast
     import inspect
