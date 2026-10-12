@@ -188,6 +188,15 @@ def test_map_weekday_options_follow_page_language(map_site, page, lang):
     assert controls.labels["pick-weekday"].strip() == STRINGS["map.label.weekday"][lang]
 
 
+@pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
+def test_map_station_and_ortsteil_labels_follow_page_language(map_site, page, lang):
+    controls = _Controls()
+    controls.feed((map_site / page).read_text())
+    assert {"pick-station", "pick-ortsteil"} <= controls.labels.keys()
+    assert controls.labels["pick-station"].strip() == STRINGS["map.label.station"][lang]
+    assert controls.labels["pick-ortsteil"].strip() == STRINGS["map.label.ortsteil"][lang]
+
+
 def test_legal_pages_are_one_language_each_with_operator_block(map_site):
     for page in ("impressum", "datenschutz"):
         de = (map_site / f"{page}.html").read_text()
@@ -329,7 +338,8 @@ def test_map_js_tick_values_come_from_the_server():
 
 
 class _Controls(HTMLParser):
-    """Labels by for=, <input> attrs by id, the datalist ids and the pick-hour options."""
+    """Labels by for=, <input> attrs by id, the datalist and select ids, and the pick-hour
+    and pick-weekday options."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -355,7 +365,8 @@ class _Controls(HTMLParser):
             self.datalists.add(a["id"])
         elif tag == "select":
             self._select = a.get("id")
-            self.selects.add(self._select)
+            if self._select:
+                self.selects.add(self._select)
         elif tag == "option" and self._select == "pick-hour":
             self.hour_options.append((a.get("value"), "selected" in a))
         elif tag == "option" and self._select == "pick-weekday":
