@@ -89,11 +89,11 @@ def test_map_page_structure(map_site, page):
     css = [link for link in head.stylesheets if link.get("href") == css_url]
     assert len(css) == 1
     assert css[0].get("integrity") == "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    assert "crossorigin" in css[0]
+    assert css[0].get("crossorigin") in ("", "anonymous")
     js = [script for script in head.scripts if script["src"] == js_url]
     assert len(js) == 1
     assert js[0].get("integrity") == "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    assert "crossorigin" in js[0]
+    assert js[0].get("crossorigin") in ("", "anonymous")
     external = [s["src"] for s in head.scripts if s["src"].startswith(("http://", "https://"))]
     assert external == [js_url]
     controls = _Controls()
