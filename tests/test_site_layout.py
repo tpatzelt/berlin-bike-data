@@ -370,7 +370,7 @@ def test_not_enough_data_css_has_no_border_box():
 
 
 class _DetailsTableParser(HTMLParser):
-    """Collects tabindex, role and caption presence of each outermost <table> inside a <details>."""
+    """Collects tabindex, role and caption of each outermost <table> inside a <details>."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -426,6 +426,12 @@ def test_details_table_parser_credits_caption_after_nested_table():
         "<caption>c</caption></table></details>"
     )
     assert parser.tables == [{"tabindex": "0", "role": "table", "caption": True}]
+
+
+def test_details_table_parser_records_no_role_for_a_roleless_table():
+    parser = _DetailsTableParser()
+    parser.feed("<details><table><caption>c</caption></table></details>")
+    assert parser.tables == [{"tabindex": None, "role": None, "caption": True}]
 
 
 @pytest.mark.parametrize("page", ["index", "map"])
