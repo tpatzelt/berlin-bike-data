@@ -149,7 +149,10 @@ class _ArticleLangs(HTMLParser):
         self.html_lang = None
         self.article_ids: list[str] = []
         self.langs: dict[str, list[str]] = {}
+        self.h2: dict[str, list[str]] = {}
         self._current = None
+        self._h2_depth = 0
+        self._anchor_depth = 0
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -159,12 +162,28 @@ class _ArticleLangs(HTMLParser):
             self._current = a.get("id")
             self.article_ids.append(self._current)
             self.langs[self._current] = []
-        elif self._current and a.get("lang"):
-            self.langs[self._current].append(a["lang"])
+            self.h2[self._current] = []
+        elif self._current:
+            if a.get("lang"):
+                self.langs[self._current].append(a["lang"])
+            if tag == "h2":
+                self._h2_depth += 1
+                self.h2[self._current].append("")
+            elif self._h2_depth and tag == "a":
+                self._anchor_depth += 1
 
     def handle_endtag(self, tag):
         if tag == "article":
             self._current = None
+        elif tag == "h2" and self._h2_depth:
+            self._h2_depth -= 1
+            self.h2[self._current][-1] = self.h2[self._current][-1].strip()
+        elif tag == "a" and self._anchor_depth:
+            self._anchor_depth -= 1
+
+    def handle_data(self, data):
+        if self._h2_depth and not self._anchor_depth:
+            self.h2[self._current][-1] += data
 
 
 @pytest.fixture(scope="module")
@@ -181,20 +200,12 @@ def test_all_six_articles_are_single_language(which, name, site, synthetic_site_
     assert p.article_ids == ["availability", "shortage", "bezirke", "flow", "weather", "footprint"]
     for article in p.article_ids:
         assert [lang for lang in p.langs[article] if lang != p.html_lang] == []
-    if which == "synthetic":
-        text = (root / name).read_text()
-        marker = "Verfügbarkeit in Berlin" if name == "index.html" else "Availability in Berlin"
-        other = "Availability in Berlin" if name == "index.html" else "Verfügbarkeit in Berlin"
-        assert marker in text and other not in text
-        # one distinctive heading per converted article, in each language only
-        headings = {
-            "flow": ("Netto-Fluss zwischen Bezirken", "Net flow between Bezirke"),
-            "weather": ("Verfügbarkeit bei Regen und Kälte", "Availability on rainy and cold hours"),
-            "footprint": ("Der tägliche Fußabdruck des Systems", "The system's daily footprint"),
-        }
-        for de, en in headings.values():
-            mine, theirs = (de, en) if name == "index.html" else (en, de)
-            assert mine in text.replace("&#39;", "'") and theirs not in text.replace("&#39;", "'")
+    lang = p.html_lang
+    other = "en" if lang == "de" else "de"
+    assert lang in ("de", "en")
+    for article in p.article_ids:
+        assert p.h2[article] == [STRINGS[f"{article}.heading"][lang]]
+        assert STRINGS[f"{article}.heading"][other] not in p.h2[article]
 
 
 class _ColumnHeaders(HTMLParser):
