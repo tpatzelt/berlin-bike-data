@@ -5,7 +5,7 @@ Renders no HTML itself: it returns the scaled points/bars that
 
 ``availability_chart`` draws the citywide availability-by-hour line chart,
 one ``<polyline>`` per weekday (Monday first), colored via the
-``--series-1``..``--series-7`` custom properties defined in ``site.css``,
+``--series-N`` custom properties (``SERIES_COLOR_COUNT`` of them) defined in ``site.css``,
 following the validated categorical order from the project's data-viz
 palette (blue, orange, aqua, yellow, magenta, green, violet).
 
@@ -15,7 +15,7 @@ morning window, bars colored via ``--accent``.
 
 ``bezirk_availability_chart`` draws the per-Bezirk availability-by-hour line
 chart (Mon-Fri only), one ``<polyline>`` per Bezirk sorted by name, colored
-via ``--series-1``..``--series-7`` (cycling if there are more than 7).
+via the ``--series-N`` properties (cycling after ``SERIES_COLOR_COUNT`` series).
 
 ``flow_chart`` draws the per-Bezirk net-flow-by-hour line chart (weekday mean
 per day), one ``<polyline>`` per Bezirk sorted by name around a visible zero
