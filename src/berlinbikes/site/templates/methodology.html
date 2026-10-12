@@ -16,9 +16,9 @@
 <tbody>
 {% for source in data_sources %}
 <tr>
-<td>{{ source.name }} (<span class="source-url">{{ source.url }}</span>{% if source.url_note %}, {{ source.url_note }}{% endif %})</td>
-<td>{{ source.used_for_de if lang == "de" else source.used_for_en }}</td>
-<td>{{ source.license }}</td>
+<td data-label="{{ t('methodology.col.source') }}">{{ source.name }} (<span class="source-url">{{ source.url }}</span>{% if source.url_note %}, {{ source.url_note }}{% endif %})</td>
+<td data-label="{{ t('methodology.col.used_for') }}">{{ source.used_for_de if lang == "de" else source.used_for_en }}</td>
+<td data-label="{{ t('methodology.col.license') }}">{{ source.license }}</td>
 </tr>
 {% endfor %}
 </tbody>
