@@ -9,6 +9,8 @@ approach, the rotating-id limitation and the documented thresholds.
 
 from __future__ import annotations
 
+import dataclasses
+import html
 import re
 from html.parser import HTMLParser
 
@@ -18,7 +20,7 @@ from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.weather_effect import COLD_C_THRESHOLD, RAIN_MM_THRESHOLD
 from berlinbikes.site import PAGES
 from berlinbikes.site.i18n import STRINGS
-from berlinbikes.site.sources import DATA_SOURCES
+from berlinbikes.site.sources import DATA_SOURCES, DataSource
 
 
 class _PageParser(HTMLParser):
@@ -95,6 +97,28 @@ def test_used_for_column_is_in_the_page_language(methodology_html, methodology_e
         assert source.used_for_en not in methodology_html
         assert source.used_for_en in methodology_en_html
         assert source.used_for_de not in methodology_en_html
+
+
+def test_every_de_en_field_pair_shows_only_its_own_language(methodology_html, methodology_en_html):
+    names = {f.name for f in dataclasses.fields(DataSource)}
+    de = {n[:-3] for n in names if n.endswith("_de")}
+    en = {n[:-3] for n in names if n.endswith("_en")}
+    assert de == en, f"unpaired _de/_en fields: {sorted(de ^ en)}"
+    assert {"license", "used_for", "url_note"} <= de
+    page_de, page_en = html.unescape(methodology_html), html.unescape(methodology_en_html)
+    for source in DATA_SOURCES:
+        for field in sorted(de):
+            msg = f"{source.name}.{field}"
+            value_de = getattr(source, f"{field}_de")
+            value_en = getattr(source, f"{field}_en")
+            assert bool(value_de) == bool(value_en), msg
+            if not value_de:
+                continue
+            assert value_de in page_de, msg
+            assert value_en in page_en, msg
+            if value_de != value_en:
+                assert value_en not in page_de, msg
+                assert value_de not in page_en, msg
 
 
 def test_pages_are_single_language(methodology_html, methodology_en_html):
