@@ -148,7 +148,7 @@ def test_map_i18n_json_is_per_language_and_complete(map_site):
     assert set(de) == set(en) == {"days", "ortsteil_title", "load_error", "hour", "plot", "axis_x", "axis_y", "headline", "x_ticks", "y_tick_target", "ortsteil_button", "bins", "bin_mins", "bin_labels", "bin_none", "no_data_radius", "marker_label"}
     assert de["days"] == "({n} Tage)" and en["days"] == "({n} days)"
     assert de["load_error"].startswith("Daten") and en["load_error"].startswith("Could not")
-    assert en["ortsteil_title"] == "District {name}"
+    assert en["ortsteil_title"] == "Ortsteil {name}"
 
 
 def test_map_js_has_no_inline_bilingual_strings():
@@ -316,7 +316,7 @@ def test_map_page_has_hour_picker_search_and_ortsteil_button(map_site, page, lan
     label = {"de": "Station suchen", "en": "Search for a station"}[lang]
     assert label in html
     i18n = json.loads(_collect(map_site / page).i18n_json)
-    assert i18n["ortsteil_button"] == {"de": "Ganzes Ortsteil zeigen", "en": "Show the whole Ortsteil"}[lang]
+    assert i18n["ortsteil_button"] == {"de": "Ganzen Ortsteil zeigen", "en": "Show the whole Ortsteil"}[lang]
     assert i18n["x_ticks"][0] == 0 and i18n["y_tick_target"] >= 1
     assert 'id="show-ortsteil"' in html
 
@@ -358,3 +358,11 @@ def test_avail_tokens_exist_in_both_themes_and_have_contrast(map_site):
             assert contrast_ratio(tokens[f"--avail-{i}"], tokens["--bg"]) >= 3
     for i in range(len(MAP_BINS)):
         assert f".avail-{i} " in css
+
+
+def test_english_map_strings_use_ortsteil_not_district():
+    from berlinbikes.site.i18n import STRINGS
+
+    map_keys = [k for k in STRINGS if k.startswith("map.")]
+    assert map_keys
+    assert not [k for k in map_keys if "district" in STRINGS[k]["en"].lower()]
