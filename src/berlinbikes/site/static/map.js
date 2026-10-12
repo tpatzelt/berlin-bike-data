@@ -263,7 +263,7 @@
     }
     $("profile-days").textContent = I18N.days.replace("{n}", data.full_days);
     // The server pre-fills these selects; rebuild them so no option appears twice.
-    fillSelect($("pick-station"), data.stations.map(function (s) { return option(s.id, s.name || s.id); }));
+    fillSelect($("pick-station"), data.stations.map(function (s) { return option(s.id, stationLabel(s)); }));
     fillSelect($("pick-ortsteil"), data.ortsteile.map(function (o) { return option(o.name, o.name); }));
     var list = $("station-names");
     while (list.firstChild) list.removeChild(list.firstChild);

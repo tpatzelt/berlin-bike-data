@@ -375,3 +375,54 @@ def test_map_js_normalises_padded_hash_numbers_and_labels_stations_with_ortsteil
     label = js.split("function stationLabel(station)")[1].split("\n  }")[0]
     assert "station.ortsteil" in label
     assert "list.appendChild(option(stationLabel(s)" in js
+
+
+class _StationOptions(HTMLParser):
+    """Datalist option values and pick-station option texts."""
+
+    def __init__(self):
+        super().__init__()
+        self.datalist: list[str] = []
+        self.select_texts: list[str] = []
+        self._where = None
+        self._text: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "datalist" and a.get("id") == "station-names":
+            self._where = "datalist"
+        elif tag == "select":
+            self._where = "select" if a.get("id") == "pick-station" else None
+        elif tag == "option" and self._where == "datalist":
+            self.datalist.append(a["value"])
+        elif tag == "option" and self._where == "select":
+            self._text = []
+
+    def handle_data(self, data):
+        if self._where == "select":
+            self._text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "option" and self._where == "select":
+            self.select_texts.append("".join(self._text))
+        elif tag in ("select", "datalist"):
+            self._where = None
+
+
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_station_select_and_search_list_show_name_and_ortsteil(map_site, synthetic_data_dir, page):
+    payload = profiles_payload(synthetic_data_dir)
+    expected = [
+        (s["name"] or s["id"]) + (f" ({s['ortsteil']})" if s["ortsteil"] else "") for s in payload["stations"]
+    ]
+    assert expected and any("(" in label for label in expected)
+    parsed = _StationOptions()
+    parsed.feed((map_site / page).read_text())
+    assert parsed.datalist == expected
+    assert parsed.select_texts[0] == "–"
+    assert parsed.select_texts[1:] == expected
+
+
+def test_map_js_passes_station_label_to_the_pick_station_select():
+    assert _JS.exists()
+    assert 'fillSelect($("pick-station"), data.stations.map(function (s) { return option(s.id, stationLabel(s)); }))' in _JS.read_text()
