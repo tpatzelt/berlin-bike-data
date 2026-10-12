@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Karte / Map – Wie Berlin radelt{% endblock %}
+{% block title %}{{ t("title.map") }}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -8,60 +8,108 @@
 <script src="map.js" defer></script>
 {% endblock %}
 {% block content %}
-<section lang="de">
-<h2>Gibt es um 8 Uhr ein Rad an meiner Station?</h2>
-<p>Wähle eine Station (auf der Karte oder in der Liste) oder einen Ortsteil und einen Wochentag. Die Kurve zeigt, wie viele Räder dort typischerweise zu jeder Stunde verfügbar sind.</p>
-</section>
-<section lang="en">
-<h2>Will there be a bike at my station at 8:00?</h2>
-<p>Pick a station (on the map or from the list) or an Ortsteil, and a weekday. The curve shows how many bikes are typically available there at each hour.</p>
-</section>
+{% import "_chart.html" as chart with context %}
+<h2>{{ t("map.heading") }}</h2>
+<p>{{ t("map.intro") }}</p>
 <noscript>
-<p class="not-enough-data">
-<span lang="de">Die Karte braucht JavaScript. Die Rohdaten gibt es als <a href="data/profiles.json">profiles.json</a>.</span>
-<span lang="en">The map needs JavaScript. The raw data is available as <a href="data/profiles.json">profiles.json</a>.</span>
-</p>
+<p class="not-enough-data">{{ t("map.noscript", link='<a href="data/profiles.json">profiles.json</a>'|safe) }}</p>
 </noscript>
+{% set bin_labels = [] %}{% for b in map_bins %}{% set _ = bin_labels.append(t(b.label_key)) %}{% endfor %}
+<script type="application/json" id="map-i18n">{{ {
+  "hour": map_default_hour,
+  "plot": {"left": map_chart.axes.left, "right": map_chart.axes.right, "top": map_chart.axes.top, "bottom": map_chart.axes.bottom} if map_chart else none,
+  "days": t("map.days", n="{n}"),
+  "ortsteil_title": t("map.ortsteil_title", name="{name}"),
+  "load_error": t("map.load_error"),
+  "axis_x": t("map.axis.x"),
+  "axis_y": t("map.axis.y"),
+  "headline": t("map.headline", value="{value}", hour="{hour}"),
+  "x_ticks": map_chart.axes.x_ticks | map(attribute="label") | map("int") | list if map_chart else none,
+  "y_tick_target": map_y_tick_target,
+  "bins": map_bins | map(attribute="radius") | list,
+  "bin_mins": map_bins | map(attribute="min") | list,
+  "bin_labels": bin_labels,
+  "bin_none": t("map.bin.none"),
+  "no_data_radius": map_no_data_radius,
+  "marker_label": t("map.marker_label", name="{name}", bin="{bin}", hour="{hour}"),
+  "ortsteil_button": t("map.ortsteil_button")
+} | tojson }}</script>
 <p id="map-status" class="not-enough-data" hidden></p>
-<div id="map" class="map" aria-label="Karte der Stationen / Map of stations"></div>
 <form class="map-controls" onsubmit="return false">
 <p>
-<label for="pick-station"><span lang="de">Station</span> / <span lang="en">Station</span></label>
-<select id="pick-station"><option value="">–</option></select>
+<label for="pick-search">{{ t("map.label.search") }}</label>
+<input id="pick-search" type="search" list="station-names" autocomplete="off" placeholder="{{ t("map.search.placeholder") }}">
+<datalist id="station-names">
+{% if map_default %}{% for s in map_payload.stations %}<option value="{{ s.label }}">
+{% endfor %}{% endif %}</datalist>
 </p>
 <p>
-<label for="pick-ortsteil"><span lang="de">Ortsteil</span> / <span lang="en">District</span></label>
-<select id="pick-ortsteil"><option value="">–</option></select>
+<label for="pick-station">{{ t("map.label.station") }}</label>
+<select id="pick-station"><option value="">–</option>
+{% if map_default %}{% for s in map_payload.stations %}<option value="{{ s.id }}"{% if s.id == map_default.id %} selected{% endif %}>{{ s.label }}</option>
+{% endfor %}{% endif %}</select>
 </p>
 <p>
-<label for="pick-weekday"><span lang="de">Wochentag</span> / <span lang="en">Weekday</span></label>
+<label for="pick-ortsteil">{{ t("map.label.ortsteil") }}</label>
+<select id="pick-ortsteil"><option value="">–</option>
+{% if map_default %}{% for o in map_payload.ortsteile %}<option value="{{ o.name }}">{{ o.name }}</option>
+{% endfor %}{% endif %}</select>
+</p>
+<p>
+<label for="pick-weekday">{{ t("map.label.weekday") }}</label>
 <select id="pick-weekday">
-<option value="0" selected>Montag / Monday</option>
-<option value="1">Dienstag / Tuesday</option>
-<option value="2">Mittwoch / Wednesday</option>
-<option value="3">Donnerstag / Thursday</option>
-<option value="4">Freitag / Friday</option>
-<option value="5">Samstag / Saturday</option>
-<option value="6">Sonntag / Sunday</option>
-</select>
+{% for i in range(7) %}<option value="{{ i }}"{% if i == 0 %} selected{% endif %}>{{ t("map.weekday." ~ i) }}</option>
+{% endfor %}</select>
+</p>
+<p>
+<label for="pick-hour">{{ t("map.label.hour") }}</label>
+<select id="pick-hour">
+{% for i in range(24) %}<option value="{{ i }}"{% if i == map_default_hour %} selected{% endif %}>{{ i }}:00</option>
+{% endfor %}</select>
 </p>
 </form>
-<figure>
-<h3 id="profile-title"></h3>
-<svg id="profile-chart" class="chart" viewBox="0 0 480 200" role="img" aria-label="Verfügbare Räder je Stunde / Bikes available by hour"></svg>
+<div class="map-legend" id="map-legend">
+<h3>{{ t("map.legend.heading") }}</h3>
+<ul>
+{% for b in map_bins %}<li><svg width="{{ 2 * b.radius + 4 }}" height="{{ 2 * b.radius + 4 }}" aria-hidden="true"><circle class="avail-{{ loop.index0 }}" cx="{{ b.radius + 2 }}" cy="{{ b.radius + 2 }}" r="{{ b.radius }}"></circle></svg> {{ bin_labels[loop.index0] }}</li>
+{% endfor %}<li><svg width="{{ 2 * map_no_data_radius + 4 }}" height="{{ 2 * map_no_data_radius + 4 }}" aria-hidden="true"><circle class="avail-none" cx="{{ map_no_data_radius + 2 }}" cy="{{ map_no_data_radius + 2 }}" r="{{ map_no_data_radius }}"></circle></svg> {{ t("map.bin.none") }}</li>
+</ul>
+</div>
+<div class="map-layout">
+<div id="map" class="map" aria-label="{{ t("map.aria") }}"></div>
+<div class="map-detail">
+{% if map_chart %}
+<figure class="map-profile">
+<h3 id="profile-title">{{ map_default.label }}</h3>
+<button type="button" id="show-ortsteil" class="show-ortsteil" hidden></button>
+<svg id="profile-chart" class="chart" viewBox="{{ map_chart.view_box }}" font-size="{{ map_chart.axes.font_size }}" role="img" aria-label="{{ t("map.chart.aria") }}">
+{{ chart.axes_frame(map_chart.axes, t("map.axis.x"), t("map.axis.y")) }}
+<polyline points="{{ map_chart.points }}" fill="none" stroke="var(--accent)" stroke-width="2.5"></polyline>
+{% if map_chart.headline %}
+{{ chart.headline(map_chart.headline, t("map.headline", value="%.0f"|format(map_chart.headline.value), hour=map_chart.headline.hour)) }}
+{% endif %}
+</svg>
 <figcaption>
-<span lang="de">Mittlere verfügbare Räder je Stunde (0–23 Uhr, Europe/Berlin).</span>
-<span lang="en">Mean bikes available by local hour (0–23, Europe/Berlin).</span>
-<span id="profile-days"></span>
+{{ t("map.caption") }}
+<span id="profile-days">{{ t("map.days", n=map_payload.full_days) }}</span>
 </figcaption>
 </figure>
-<details open>
-<summary><span lang="de">Werte als Tabelle</span><span lang="en">Values as a table</span></summary>
-<table id="profile-table">
-<caption><span lang="de">Verfügbare Räder je Stunde</span> / <span lang="en">Bikes available by hour</span></caption>
-<thead><tr><th scope="col"><span lang="de">Stunde</span> / <span lang="en">Hour</span></th><th scope="col"><span lang="de">Räder</span> / <span lang="en">Bikes</span></th></tr></thead>
-<tbody></tbody>
+<details open class="map-table">
+<summary>{{ t("map.table.summary") }}</summary>
+<table id="profile-table" tabindex="0" role="table">
+<caption>{{ t("map.table.caption") }}</caption>
+<thead><tr><th scope="col">{{ t("map.table.hour") }}</th><th scope="col">{{ t("map.table.bikes") }}</th></tr></thead>
+<tbody>
+{% for value in map_chart.hours %}
+<tr><th scope="row">{{ loop.index0 }}:00</th><td>{{ "–" if value is none else value }}</td></tr>
+{% endfor %}
+</tbody>
 </table>
 </details>
-<p class="map-credit"><span lang="de">Kartendaten</span> / <span lang="en">Map data</span> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></p>
+{% else %}
+{{ chart.not_enough_data(map_payload.full_days, map_payload.min_full_days) }}
+{% endif %}
+</div>
+</div>
+<p class="map-credit">{{ t("map.credit") }} © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a></p>
 {% endblock %}

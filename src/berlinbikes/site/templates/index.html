@@ -1,43 +1,54 @@
 {% extends "base.html" %}
-{% block title %}Wie Berlin radelt{% endblock %}
+{% block title %}{{ t("title.index") }}{% endblock %}
 {% block content %}
-<article>
-<section lang="de">
-<h2>Verfügbarkeit in Berlin</h2>
-<p>Mittlere Anzahl verfügbarer Räder in Berlin, je Wochentag und Uhrzeit (Europe/Berlin).</p>
-</section>
-<section lang="en">
-<h2>Availability in Berlin</h2>
-<p>Mean number of bikes available citywide, by weekday and local hour (Europe/Berlin).</p>
-</section>
-{% if availability_chart.status == "ok" %}
-<figure>
-<svg viewBox="{{ availability_chart.view_box }}" role="img" class="chart"
-     aria-label="Mittlere Anzahl verfügbarer Räder in Berlin je Wochentag und Uhrzeit (0-23 Uhr, Europe/Berlin) / Mean bikes available in Berlin by weekday and local hour (0-23, Europe/Berlin)">
-{% for wd in availability_chart.weekdays %}
-<polyline points="{{ wd.points }}" fill="none" stroke="var(--series-{{ wd.index + 1 }})" stroke-width="2"></polyline>
-{% endfor %}
-</svg>
-<figcaption>
-<span lang="de">Verfügbare Räder je Uhrzeit (0–23 Uhr, Europe/Berlin) und Wochentag (Mo–So), auf Basis von {{ availability_chart.full_days }} vollen Tagen.</span>
-<span lang="en">Bikes available by local hour (0–23, Europe/Berlin) and weekday (Mon–Sun), based on {{ availability_chart.full_days }} full days.</span>
-</figcaption>
-</figure>
-<ul class="chart-legend">
-{% for wd in availability_chart.weekdays %}
-<li><span class="swatch" style="background: var(--series-{{ wd.index + 1 }})"></span><span lang="de">{{ wd.name_de }}</span><span lang="en">{{ wd.name_en }}</span></li>
+{% import "_chart.html" as chart with context %}
+<section class="lead" aria-labelledby="lead-title">
+<h1 id="lead-title">{{ t("title.index") }}</h1>
+<p class="lead-text">{{ t("lead.text") }}</p>
+<ul class="callouts">
+<li><span class="callout-number">{{ availability_chart.full_days }}</span> <span class="callout-label">{{ t("callout.days") }}</span></li>
+{% if availability_chart.status == "ok" and availability_chart.headline %}
+<li><span class="callout-number">{{ "%.0f"|format(availability_chart.headline.value) }}</span> <span class="callout-label">{{ t("callout.bikes", hour=availability_chart.headline.hour) }}</span></li>
+{% endif %}
+{% if shortage_chart.status == "ok" and shortage_chart.share_pct is not none %}
+<li><span class="callout-number">{{ "%.1f"|format(shortage_chart.share_pct) }}%</span> <span class="callout-label">{{ t("callout.shortage") }}</span></li>
+{% endif %}
+</ul>
+<nav class="toc" aria-label="{{ t("toc.aria") }}">
+<ul>
+{% for sid in ["availability", "shortage", "bezirke", "flow", "weather", "footprint"] %}
+<li><a href="#{{ sid }}">{{ t(sid ~ ".heading") }}</a></li>
 {% endfor %}
 </ul>
+</nav>
+</section>
+<article id="availability">
+<h2>{{ t("availability.heading") }} <a class="anchor" href="#availability" aria-label="{{ t("anchor.aria") }}">#</a></h2>
+<p>{{ t("availability.intro") }}</p>
+{% if availability_chart.status == "ok" %}
+<figure>
+<svg viewBox="{{ availability_chart.view_box }}" role="img" class="chart" font-size="{{ availability_chart.axes.font_size }}"
+     aria-label="{{ t("availability.aria") }}">
+{{ chart.axes_frame(availability_chart.axes, t("availability.axis.x"), t("availability.axis.y")) }}
+{% for wd in availability_chart.weekdays %}
+<polyline points="{{ wd.points }}" fill="none" stroke="var(--series-{{ wd.index + 1 }})" stroke-width="2" stroke-dasharray="{{ wd.dasharray }}"></polyline>
+{% endfor %}
+{{ chart.headline(availability_chart.headline, t("availability.headline", value="%.0f"|format(availability_chart.headline.value), hour=availability_chart.headline.hour)) }}
+</svg>
+{% set legend_items = [] %}
+{% for wd in availability_chart.weekdays %}
+{% set _ = legend_items.append({"color": "var(--series-" ~ (wd.index + 1) ~ ")", "dasharray": wd.dasharray, "label": t("weekday.short." ~ wd.index)}) %}
+{% endfor %}
+{{ chart.dash_legend(legend_items) }}
+<figcaption>{{ t("availability.caption", full_days=availability_chart.full_days) }}</figcaption>
+</figure>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
-<table>
-<caption>
-<span lang="de">Verfügbare Räder je Wochentag und Uhrzeit</span>
-<span lang="en">Bikes available by weekday and local hour</span>
-</caption>
+<summary>{{ t("common.show_table") }}</summary>
+<table tabindex="0" role="table">
+<caption>{{ t("availability.table.caption") }}</caption>
 <thead>
 <tr>
-<th scope="col"><span lang="de">Tag</span><span lang="en">Day</span></th>
+<th scope="col">{{ t("common.table.day") }}</th>
 {% for hour in range(24) %}
 <th scope="col">{{ hour }}</th>
 {% endfor %}
@@ -46,7 +57,7 @@
 <tbody>
 {% for wd in availability_chart.weekdays %}
 <tr>
-<th scope="row"><span lang="de">{{ wd.name_de }}</span><span lang="en">{{ wd.name_en }}</span></th>
+<th scope="row">{{ t("weekday.short." ~ wd.index) }}</th>
 {% for value in wd.hours %}
 <td>{{ "%.1f"|format(value) }}</td>
 {% endfor %}
@@ -56,50 +67,39 @@
 </table>
 </details>
 {% else %}
-<p class="not-enough-data">
-{{ availability_chart.message }} ({{ availability_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(availability_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
-<article>
-<section lang="de">
-<h2>Der Morgen-Engpass um 8 Uhr</h2>
+<article id="shortage">
+<h2>{{ t("shortage.heading") }} <a class="anchor" href="#shortage" aria-label="{{ t("anchor.aria") }}">#</a></h2>
 {% if shortage_chart.status == "ok" and shortage_chart.share_pct is not none %}
-<p>An Wochentagen waren um 8:00 Uhr durchschnittlich {{ "%.1f"|format(shortage_chart.share_pct) }}% der Stationen leer.</p>
+<p>{{ t("shortage.summary", share_pct="%.1f"|format(shortage_chart.share_pct)) }}</p>
 {% endif %}
-</section>
-<section lang="en">
-<h2>The 8am morning shortage</h2>
-{% if shortage_chart.status == "ok" and shortage_chart.share_pct is not none %}
-<p>On weekdays, an average of {{ "%.1f"|format(shortage_chart.share_pct) }}% of stations were empty at 8:00.</p>
-{% endif %}
-</section>
 {% if shortage_chart.status == "ok" %}
 <figure>
-<svg viewBox="{{ shortage_chart.view_box }}" role="img" class="chart bars" aria-label="{{ shortage_chart.aria_label }}">
+<svg viewBox="{{ shortage_chart.view_box }}" role="img" class="chart bars" font-size="{{ shortage_chart.font_size }}" aria-label="{{ t("shortage.aria", n=shortage_chart.bars|length) }}">
+{{ chart.bar_frame(shortage_chart, t("shortage.axis.x")) }}
 {% for bar in shortage_chart.bars %}
-<rect x="{{ bar.bar_x }}" y="{{ bar.bar_y }}" width="{{ bar.bar_width }}" height="{{ bar.bar_height }}" fill="var(--accent)"></rect>
-<text x="{{ bar.bar_x - 4 }}" y="{{ bar.label_y }}" text-anchor="end">{{ bar.station_id }} ({{ bar.ortsteil }})</text>
-<text x="{{ bar.value_x }}" y="{{ bar.label_y }}">{{ "%.1f"|format(bar.minutes_per_day) }}</text>
+<rect x="{{ bar.bar_x }}" y="{{ bar.bar_y }}" width="{{ "%.1f"|format(bar.bar_width) }}" height="{{ bar.bar_height }}" fill="var(--accent)"></rect>
+{% if not bar.is_top %}
+<text class="value" x="{{ "%.1f"|format(bar.value_x) }}" y="{{ "%.1f"|format(bar.label_y) }}">{{ "%.1f"|format(bar.minutes_per_day) }}</text>
+{% endif %}
 {% endfor %}
+{% if shortage_chart.headline %}
+{{ chart.headline(shortage_chart.headline, t("shortage.headline", value="%.1f"|format(shortage_chart.headline.value))) }}
+{% endif %}
 </svg>
-<figcaption>
-<span lang="de">Stationen mit den meisten leeren Minuten pro Tag im Morgenfenster (Mo–Fr 7:30–8:30 Uhr), auf Basis von {{ shortage_chart.full_days }} vollen Tagen.</span>
-<span lang="en">Stations with the most empty minutes per day in the morning window (Mon–Fri 7:30–8:30), based on {{ shortage_chart.full_days }} full days.</span>
-</figcaption>
+<figcaption>{{ t("shortage.caption", full_days=shortage_chart.full_days) }}</figcaption>
 </figure>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
-<table>
-<caption>
-<span lang="de">Leere Minuten pro Tag im Morgenfenster, nach Station</span>
-<span lang="en">Empty minutes per day in the morning window, by station</span>
-</caption>
+<summary>{{ t("common.show_table") }}</summary>
+<table tabindex="0" role="table">
+<caption>{{ t("shortage.table.caption") }}</caption>
 <thead>
 <tr>
-<th scope="col"><span lang="de">Station</span><span lang="en">Station</span></th>
-<th scope="col">Ortsteil</th>
-<th scope="col"><span lang="de">Min./Tag</span><span lang="en">Min/day</span></th>
+<th scope="col">{{ t("common.table.station") }}</th>
+<th scope="col">{{ t("common.table.ortsteil") }}</th>
+<th scope="col">{{ t("common.table.min_per_day") }}</th>
 </tr>
 </thead>
 <tbody>
@@ -114,48 +114,38 @@
 </table>
 </details>
 {% else %}
-<p class="not-enough-data">
-{{ shortage_chart.message }} ({{ shortage_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(shortage_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
-<article>
-<section lang="de">
-<h2>Verfügbarkeit je Bezirk</h2>
-<p>Mittlere Anzahl verfügbarer Räder je Bezirk, Mo-Fr, nach Uhrzeit (Europe/Berlin).</p>
-</section>
-<section lang="en">
-<h2>Availability by Bezirk</h2>
-<p>Mean number of bikes available by Bezirk, Mon-Fri, by local hour (Europe/Berlin).</p>
-</section>
+<article id="bezirke">
+<h2>{{ t("bezirke.heading") }} <a class="anchor" href="#bezirke" aria-label="{{ t("anchor.aria") }}">#</a></h2>
+<p>{{ t("bezirke.intro") }}</p>
 {% if bezirk_availability_chart.status == "ok" %}
 <figure>
-<svg viewBox="{{ bezirk_availability_chart.view_box }}" role="img" class="chart"
-     aria-label="Mittlere Anzahl verfügbarer Räder je Bezirk, Mo-Fr, nach Uhrzeit (0-23 Uhr, Europe/Berlin) / Mean bikes available by Bezirk, Mon-Fri, by local hour (0-23, Europe/Berlin)">
+<svg viewBox="{{ bezirk_availability_chart.view_box }}" role="img" class="chart" font-size="{{ bezirk_availability_chart.axes.font_size }}"
+     aria-label="{{ t("bezirke.aria") }}">
+{{ chart.axes_frame(bezirk_availability_chart.axes, t("bezirke.axis.x"), t("bezirke.axis.y")) }}
 {% for bez in bezirk_availability_chart.bezirke %}
-<polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2"></polyline>
+<polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2" stroke-dasharray="{{ bez.dasharray }}"></polyline>
 {% endfor %}
+{% if bezirk_availability_chart.headline %}
+{{ chart.headline(bezirk_availability_chart.headline, t("bezirke.headline", name=bezirk_availability_chart.headline.name, value="%.0f"|format(bezirk_availability_chart.headline.value), hour=bezirk_availability_chart.headline.hour)) }}
+{% endif %}
 </svg>
-<figcaption>
-<span lang="de">Verfügbare Räder je Bezirk, Mo-Fr, je Uhrzeit (0–23 Uhr, Europe/Berlin), auf Basis von {{ bezirk_availability_chart.full_days }} vollen Tagen.</span>
-<span lang="en">Bikes available by Bezirk, Mo-Fr, by local hour (0–23, Europe/Berlin), based on {{ bezirk_availability_chart.full_days }} full days.</span>
-</figcaption>
-</figure>
-<ul class="chart-legend">
+{% set legend_items = [] %}
 {% for bez in bezirk_availability_chart.bezirke %}
-<li><span class="swatch" style="background: var(--series-{{ bez.color_index }})"></span><span>{{ bez.name }}</span></li>
+{% set _ = legend_items.append({"color": "var(--series-" ~ bez.color_index ~ ")", "dasharray": bez.dasharray, "label": bez.name}) %}
 {% endfor %}
-</ul>
+{{ chart.dash_legend(legend_items) }}
+<figcaption>{{ t("bezirke.caption", full_days=bezirk_availability_chart.full_days) }}</figcaption>
+</figure>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
-<table>
-<caption>
-<span lang="de">Verfügbare Räder je Bezirk und Uhrzeit (Mo-Fr)</span>
-<span lang="en">Bikes available by Bezirk and local hour (Mo-Fr)</span>
-</caption>
+<summary>{{ t("common.show_table") }}</summary>
+<table tabindex="0" role="table">
+<caption>{{ t("bezirke.table.caption") }}</caption>
 <thead>
 <tr>
-<th scope="col">Bezirk</th>
+<th scope="col">{{ t("common.table.bezirk") }}</th>
 {% for hour in range(24) %}
 <th scope="col">{{ hour }}</th>
 {% endfor %}
@@ -174,49 +164,39 @@
 </table>
 </details>
 {% else %}
-<p class="not-enough-data">
-{{ bezirk_availability_chart.message }} ({{ bezirk_availability_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(bezirk_availability_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
-<article>
-<section lang="de">
-<h2>Netto-Fluss zwischen Bezirken</h2>
-<p>Netto gewonnene oder verlorene Räder je Bezirk und Uhrzeit, Mo-Fr im Mittel pro Tag (Europe/Berlin).</p>
-</section>
-<section lang="en">
-<h2>Net flow between Bezirke</h2>
-<p>Net bikes gained or lost per Bezirk by local hour, Mon-Fri mean per day (Europe/Berlin).</p>
-</section>
+<article id="flow">
+<h2>{{ t("flow.heading") }} <a class="anchor" href="#flow" aria-label="{{ t("anchor.aria") }}">#</a></h2>
+<p>{{ t("flow.intro") }}</p>
 {% if flow_chart.status == "ok" %}
 <figure>
-<svg viewBox="{{ flow_chart.view_box }}" role="img" class="chart"
-     aria-label="Räder gewonnen/verloren je Bezirk und Uhrzeit (0-23 Uhr, Mo-Fr im Mittel pro Tag, Europe/Berlin) / Bikes gained/lost per Bezirk by local hour (0-23, Mon-Fri mean per day, Europe/Berlin)">
-<line x1="{{ flow_chart.x_start }}" x2="{{ flow_chart.x_end }}" y1="{{ flow_chart.zero_y }}" y2="{{ flow_chart.zero_y }}" stroke="var(--muted)" stroke-dasharray="4 2"></line>
+<svg viewBox="{{ flow_chart.view_box }}" role="img" class="chart" font-size="{{ flow_chart.axes.font_size }}"
+     aria-label="{{ t("flow.aria") }}">
+{{ chart.axes_frame(flow_chart.axes, t("flow.axis.x"), t("flow.axis.y")) }}
+<line class="zero-line" x1="{{ flow_chart.x_start }}" x2="{{ flow_chart.x_end }}" y1="{{ "%.1f"|format(flow_chart.zero_y) }}" y2="{{ "%.1f"|format(flow_chart.zero_y) }}"></line>
 {% for bez in flow_chart.bezirke %}
-<polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2"></polyline>
+<polyline points="{{ bez.points }}" fill="none" stroke="var(--series-{{ bez.color_index }})" stroke-width="2" stroke-dasharray="{{ bez.dasharray }}"></polyline>
 {% endfor %}
+{% if flow_chart.headline %}
+{{ chart.headline(flow_chart.headline, t("flow.headline", name=flow_chart.headline.name, value="%.1f"|format(flow_chart.headline.value), hour=flow_chart.headline.hour)) }}
+{% endif %}
 </svg>
-<figcaption>
-<span lang="de">Räder gewonnen (+) / verloren (-) je Bezirk und Uhrzeit (0–23 Uhr, Europe/Berlin), Mo-Fr im Mittel pro Tag, auf Basis von {{ flow_chart.full_days }} vollen Tagen.</span>
-<span lang="en">Bikes gained (+) / lost (-) per Bezirk by local hour (0–23, Europe/Berlin), Mon-Fri mean per day, based on {{ flow_chart.full_days }} full days.</span>
-</figcaption>
-</figure>
-<ul class="chart-legend">
+{% set legend_items = [] %}
 {% for bez in flow_chart.bezirke %}
-<li><span class="swatch" style="background: var(--series-{{ bez.color_index }})"></span><span>{{ bez.name }}</span></li>
+{% set _ = legend_items.append({"color": "var(--series-" ~ bez.color_index ~ ")", "dasharray": bez.dasharray, "label": bez.name}) %}
 {% endfor %}
-</ul>
+{{ chart.dash_legend(legend_items) }}
+<figcaption>{{ t("flow.caption", full_days=flow_chart.full_days) }}</figcaption>
+</figure>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
-<table>
-<caption>
-<span lang="de">Netto gewonnene/verlorene Räder je Bezirk und Uhrzeit (Mo-Fr)</span>
-<span lang="en">Net bikes gained/lost per Bezirk by local hour (Mo-Fr)</span>
-</caption>
+<summary>{{ t("common.show_table") }}</summary>
+<table tabindex="0" role="table">
+<caption>{{ t("flow.table.caption") }}</caption>
 <thead>
 <tr>
-<th scope="col">Bezirk</th>
+<th scope="col">{{ t("common.table.bezirk") }}</th>
 {% for hour in range(24) %}
 <th scope="col">{{ hour }}</th>
 {% endfor %}
@@ -235,50 +215,52 @@
 </table>
 </details>
 {% else %}
-<p class="not-enough-data">
-{{ flow_chart.message }} ({{ flow_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(flow_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
-<article>
-<section lang="de">
-<h2>Verfügbarkeit bei Regen und Kälte</h2>
-<p>Anteil leerer Stationen je Uhrzeit, bei Regen (&ge; {{ "%.1f"|format(rain_mm_threshold) }} mm/h) im Vergleich zu trocken, und bei Kälte (&lt; {{ "%.1f"|format(cold_c_threshold) }} °C) im Vergleich zu warm (Europe/Berlin).</p>
-</section>
-<section lang="en">
-<h2>Availability on rainy and cold hours</h2>
-<p>Share of empty stations by local hour, rainy (&ge; {{ "%.1f"|format(rain_mm_threshold) }} mm/h) versus dry, and cold (&lt; {{ "%.1f"|format(cold_c_threshold) }} &deg;C) versus warm (Europe/Berlin).</p>
-</section>
+<article id="weather">
+<h2>{{ t("weather.heading") }} <a class="anchor" href="#weather" aria-label="{{ t("anchor.aria") }}">#</a></h2>
+<p>{{ t("weather.intro", rain=("%.1f"|format(rain_mm_threshold)), cold=("%.1f"|format(cold_c_threshold))) }}</p>
 {% if weather_chart.status == "ok" %}
-{% for kind_chart, cap_de, cap_en in [(weather_chart.rain, "Regen", "rain"), (weather_chart.temperature, "Kälte", "temperature")] %}
+{% for kind_chart, kind_key in [(weather_chart.rain, "rain"), (weather_chart.temperature, "temperature")] %}
 {% if kind_chart.buckets %}
 <figure>
-<svg viewBox="{{ kind_chart.view_box }}" role="img" class="chart weather" data-kind="{{ kind_chart.kind }}"
-     aria-label="Anteil leerer Stationen je Uhrzeit (0-23 Uhr, Europe/Berlin), {{ cap_de }} / Share of empty stations by local hour (0-23, Europe/Berlin), {{ cap_en }}">
+<svg viewBox="{{ kind_chart.view_box }}" role="img" class="chart weather" data-kind="{{ kind_chart.kind }}" font-size="{{ kind_chart.axes.font_size }}"
+     aria-label="{{ t("weather.aria", kind=t("weather.kind." ~ kind_key)) }}">
+{{ chart.axes_frame(kind_chart.axes, t("weather.axis.x"), t("weather.axis.y")) }}
 {% for bucket in kind_chart.buckets %}
-<polyline points="{{ bucket.points }}" fill="none" stroke="var(--series-{{ bucket.color_index }})" stroke-width="2"></polyline>
+<polyline points="{{ bucket.points }}" fill="none" stroke="var(--series-{{ bucket.color_index }})" stroke-width="2" stroke-dasharray="{{ bucket.dasharray }}"></polyline>
 {% endfor %}
+{% for bucket in kind_chart.buckets %}
+<text class="series-label" x="{{ "%.1f"|format(bucket.label_x) }}" y="{{ "%.1f"|format(bucket.label_y) }}" text-anchor="end">{{ bucket["label_" ~ lang] }}</text>
+{% endfor %}
+{% if kind_chart.headline %}
+{% set vals = [] %}
+{% for label_de, label_en, value_de, value_en in kind_chart.headline_values %}
+{% set _ = vals.append((label_de if lang == "de" else label_en, value_de if lang == "de" else value_en)) %}
+{% endfor %}
+{% if vals|length == 2 %}
+{% set label = t("weather.headline.both", first=vals[0][0], first_value=vals[0][1], second=vals[1][0], second_value=vals[1][1]) %}
+{% else %}
+{% set label = t("weather.headline.single", first=vals[0][0], first_value=vals[0][1]) %}
+{% endif %}
+{{ chart.headline(kind_chart.headline, label) }}
+{% for point in kind_chart.headline_points %}
+{% if point != kind_chart.headline %}
+<g class="headline"><circle cx="{{ "%.1f"|format(point.x) }}" cy="{{ "%.1f"|format(point.y) }}" r="5"></circle></g>
+{% endif %}
+{% endfor %}
+{% endif %}
 </svg>
-<figcaption>
-<span lang="de">Anteil leerer Stationen (%) je Uhrzeit (0–23 Uhr, Europe/Berlin), {{ cap_de }}, auf Basis von {{ weather_chart.full_days }} vollen Tagen; {{ kind_chart.excluded_n_hours }} Stunden ohne Wetterdaten ausgeschlossen.</span>
-<span lang="en">Share of empty stations (%) by local hour (0–23, Europe/Berlin), {{ cap_en }}, based on {{ weather_chart.full_days }} full days; {{ kind_chart.excluded_n_hours }} hours excluded for missing weather.</span>
-</figcaption>
+<figcaption>{{ t("weather.caption", kind=t("weather.kind." ~ kind_key), full_days=weather_chart.full_days, excluded=kind_chart.excluded_n_hours) }}</figcaption>
 </figure>
-<ul class="chart-legend">
-{% for bucket in kind_chart.buckets %}
-<li><span class="swatch" style="background: var(--series-{{ bucket.color_index }})"></span><span lang="de">{{ bucket.label_de }}</span><span lang="en">{{ bucket.label_en }}</span></li>
-{% endfor %}
-</ul>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
-<table>
-<caption>
-<span lang="de">Anteil leerer Stationen je Uhrzeit, {{ cap_de }}</span>
-<span lang="en">Share of empty stations by local hour, {{ cap_en }}</span>
-</caption>
+<summary>{{ t("common.show_table") }}</summary>
+<table tabindex="0" role="table">
+<caption>{{ t("weather.table.caption", kind=t("weather.kind." ~ kind_key)) }}</caption>
 <thead>
 <tr>
-<th scope="col"><span lang="de">Zustand</span><span lang="en">Bucket</span></th>
+<th scope="col">{{ t("weather.table.bucket") }}</th>
 {% for hour in range(24) %}
 <th scope="col">{{ hour }}</th>
 {% endfor %}
@@ -287,7 +269,7 @@
 <tbody>
 {% for bucket in kind_chart.buckets %}
 <tr>
-<th scope="row"><span lang="de">{{ bucket.label_de }}</span><span lang="en">{{ bucket.label_en }}</span></th>
+<th scope="row">{{ bucket["label_" ~ lang] }}</th>
 {% for value in bucket.hours %}
 <td>{{ "%.1f"|format(value) if value is not none else "–" }}</td>
 {% endfor %}
@@ -297,68 +279,59 @@
 </table>
 </details>
 {% endif %}
-{% for label_de, label_en in kind_chart.missing_buckets %}
-<p class="not-enough-data">
-<span lang="de">Für „{{ label_de }}“ liegen noch keine Stunden vor.</span>
-<span lang="en">No hours classified as “{{ label_en }}” yet.</span>
-</p>
+{% for labels in kind_chart.missing_buckets %}
+<p class="not-enough-data">{{ t("weather.missing", label=labels[0 if lang == "de" else 1]) }}</p>
 {% endfor %}
 {% endfor %}
 {% else %}
-<p class="not-enough-data">
-{{ weather_chart.message }} ({{ weather_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(weather_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
-<article>
-<section lang="de">
-<h2>Der tägliche Fußabdruck des Systems</h2>
+<article id="footprint">
+<h2>{{ t("footprint.heading") }} <a class="anchor" href="#footprint" aria-label="{{ t("anchor.aria") }}">#</a></h2>
 {% if footprint_chart.status == "ok" %}
-<p>Am {{ footprint_chart.latest_date }} gab es {{ footprint_chart.latest_n_stations }} Stationen und rund {{ "%.0f"|format(footprint_chart.latest_bikes_total) }} Räder im System.</p>
+<p>{{ t("footprint.summary", date=footprint_chart.latest_date, n=footprint_chart.latest_n_stations, bikes="%.0f"|format(footprint_chart.latest_bikes_total)) }}</p>
 {% endif %}
-</section>
-<section lang="en">
-<h2>The system's daily footprint</h2>
-{% if footprint_chart.status == "ok" %}
-<p>On {{ footprint_chart.latest_date }}, there were {{ footprint_chart.latest_n_stations }} stations and about {{ "%.0f"|format(footprint_chart.latest_bikes_total) }} bikes in the system.</p>
-{% endif %}
-</section>
 {% if footprint_chart.status == "ok" %}
 <figure>
-<svg viewBox="{{ footprint_chart.view_box }}" role="img" class="chart footprint"
-     aria-label="Räder im System je Tag, E-Bike/Pedal/unbekannt, auf Basis von {{ footprint_chart.full_days }} vollen Tagen / Bikes in the system per day, e-bike/pedal/unknown, based on {{ footprint_chart.full_days }} full days">
+<svg viewBox="{{ footprint_chart.view_box }}" role="img" class="chart footprint" font-size="{{ footprint_chart.axes.font_size }}"
+     aria-label="{{ t("footprint.aria", full_days=footprint_chart.full_days) }}">
+<defs>
+<pattern id="fp-pedal" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--series-2)"></rect><line class="pattern-line" x1="0" y1="0" x2="0" y2="6"></line></pattern>
+<pattern id="fp-unknown" width="5" height="5" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="var(--series-3)"></rect><circle cx="2.5" cy="2.5" r="1.2" fill="var(--bg)"></circle></pattern>
+</defs>
+{{ chart.axes_frame(footprint_chart.axes, t("footprint.axis.x"), t("footprint.axis.y")) }}
 {% for bar in footprint_chart.bars %}
-<rect x="{{ bar.bar_x }}" y="{{ bar.ebike_y }}" width="{{ bar.bar_width }}" height="{{ bar.ebike_height }}" fill="var(--series-1)"></rect>
-<rect x="{{ bar.bar_x }}" y="{{ bar.pedal_y }}" width="{{ bar.bar_width }}" height="{{ bar.pedal_height }}" fill="var(--series-2)"></rect>
-<rect x="{{ bar.bar_x }}" y="{{ bar.unknown_y }}" width="{{ bar.bar_width }}" height="{{ bar.unknown_height }}" fill="var(--series-3)"></rect>
+<rect class="segment segment-ebike" x="{{ "%.1f"|format(bar.bar_x) }}" y="{{ "%.1f"|format(bar.ebike_y) }}" width="{{ "%.1f"|format(bar.bar_width) }}" height="{{ "%.1f"|format(bar.ebike_height) }}" fill="var(--series-1)"></rect>
+<rect class="segment segment-pedal" x="{{ "%.1f"|format(bar.bar_x) }}" y="{{ "%.1f"|format(bar.pedal_y) }}" width="{{ "%.1f"|format(bar.bar_width) }}" height="{{ "%.1f"|format(bar.pedal_height) }}" fill="url(#fp-pedal)"></rect>
+<rect class="segment segment-unknown" x="{{ "%.1f"|format(bar.bar_x) }}" y="{{ "%.1f"|format(bar.unknown_y) }}" width="{{ "%.1f"|format(bar.bar_width) }}" height="{{ "%.1f"|format(bar.unknown_height) }}" fill="url(#fp-unknown)"></rect>
+<line class="segment-sep" x1="{{ "%.1f"|format(bar.bar_x) }}" x2="{{ "%.1f"|format(bar.bar_x + bar.bar_width) }}" y1="{{ "%.1f"|format(bar.ebike_y) }}" y2="{{ "%.1f"|format(bar.ebike_y) }}"></line>
+<line class="segment-sep" x1="{{ "%.1f"|format(bar.bar_x) }}" x2="{{ "%.1f"|format(bar.bar_x + bar.bar_width) }}" y1="{{ "%.1f"|format(bar.pedal_y) }}" y2="{{ "%.1f"|format(bar.pedal_y) }}"></line>
 {% endfor %}
+<g class="segment-labels">
+{% for lab in footprint_chart.segment_labels %}
+{% set fill = {"ebike": "var(--series-1)", "pedal": "url(#fp-pedal)", "unknown": "url(#fp-unknown)"}[lab.key] %}
+<rect class="swatch-box" x="{{ "%.1f"|format(lab.x) }}" y="{{ "%.1f"|format(lab.y - 11) }}" width="11" height="11" fill="{{ fill }}"></rect>
+<text class="segment-label" x="{{ "%.1f"|format(lab.x + 15) }}" y="{{ "%.1f"|format(lab.y) }}">{{ t("footprint.legend." ~ lab.key) }}</text>
+{% endfor %}
+</g>
+{{ chart.headline(footprint_chart.headline, t("footprint.headline", value="%.0f"|format(footprint_chart.headline.value))) }}
 </svg>
-<figcaption>
-<span lang="de">Räder im System je vollem Tag, aufgeteilt in E-Bike, Pedal und unbekannt, auf Basis von {{ footprint_chart.full_days }} vollen Tagen.</span>
-<span lang="en">Bikes in the system per full day, split into e-bike, pedal and unknown, based on {{ footprint_chart.full_days }} full days.</span>
-</figcaption>
+<figcaption>{{ t("footprint.caption", full_days=footprint_chart.full_days) }}</figcaption>
 </figure>
-<ul class="chart-legend">
-<li><span class="swatch" style="background: var(--series-1)"></span><span lang="de">E-Bike</span><span lang="en">e-bike</span></li>
-<li><span class="swatch" style="background: var(--series-2)"></span><span lang="de">Pedal</span><span lang="en">pedal</span></li>
-<li><span class="swatch" style="background: var(--series-3)"></span><span lang="de">unbekannt</span><span lang="en">unknown</span></li>
-</ul>
 <details>
-<summary><span lang="de">Werte als Tabelle anzeigen</span><span lang="en">Show values as a table</span></summary>
-<table>
-<caption>
-<span lang="de">Täglicher Fußabdruck des Systems</span>
-<span lang="en">System's daily footprint</span>
-</caption>
+<summary>{{ t("common.show_table") }}</summary>
+<table tabindex="0" role="table">
+<caption>{{ t("footprint.table.caption") }}</caption>
 <thead>
 <tr>
-<th scope="col"><span lang="de">Datum</span><span lang="en">Date</span></th>
-<th scope="col"><span lang="de">Stationen</span><span lang="en">Stations</span></th>
-<th scope="col"><span lang="de">Räder an Stationen</span><span lang="en">Bikes at stations</span></th>
-<th scope="col"><span lang="de">Free-floating</span><span lang="en">Free-floating</span></th>
-<th scope="col"><span lang="de">E-Bike</span><span lang="en">E-bike</span></th>
-<th scope="col"><span lang="de">Pedal</span><span lang="en">Pedal</span></th>
-<th scope="col"><span lang="de">Unbekannt</span><span lang="en">Unknown</span></th>
+<th scope="col">{{ t("footprint.col.date") }}</th>
+<th scope="col">{{ t("footprint.col.stations") }}</th>
+<th scope="col">{{ t("footprint.col.bikes_at_stations") }}</th>
+<th scope="col">{{ t("footprint.col.free_floating") }}</th>
+<th scope="col">{{ t("footprint.col.ebike") }}</th>
+<th scope="col">{{ t("footprint.col.pedal") }}</th>
+<th scope="col">{{ t("footprint.col.unknown") }}</th>
 </tr>
 </thead>
 <tbody>
@@ -377,9 +350,7 @@
 </table>
 </details>
 {% else %}
-<p class="not-enough-data">
-{{ footprint_chart.message }} ({{ footprint_chart.full_days }}/{{ min_full_days }})
-</p>
+{{ chart.not_enough_data(footprint_chart.full_days, min_full_days) }}
 {% endif %}
 </article>
 {% endblock %}

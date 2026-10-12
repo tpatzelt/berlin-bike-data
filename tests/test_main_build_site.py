@@ -45,6 +45,28 @@ def test_build_site_command_writes_index_and_methodology(tmp_path, synthetic_dat
     assert (site_dir / "methodology.html").is_file()
 
 
+def test_build_site_command_passes_base_url_to_og_image(tmp_path, synthetic_data_dir, monkeypatch):
+    import berlinbikes.__main__ as entry
+
+    data_dir = _data_dir(tmp_path, synthetic_data_dir)
+    monkeypatch.setenv("BIKES_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("BIKES_SITE_DIR", str(tmp_path / "site-out"))
+    monkeypatch.setenv("BIKES_USER_AGENT", "berlinbikes-test/1.0")
+    monkeypatch.setenv("BIKES_SITE_BASE_URL", "https://example.org")
+    calls = []
+
+    def spy(*args, **kwargs):
+        calls.append(kwargs)
+        return []
+
+    monkeypatch.setattr(entry, "build_site", spy)
+
+    assert main(["build-site"]) == 0
+
+    assert len(calls) == 1
+    assert calls[0].get("base_url") == "https://example.org"
+
+
 def _always_503_transport() -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503)

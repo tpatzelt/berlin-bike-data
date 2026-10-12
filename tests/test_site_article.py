@@ -173,6 +173,52 @@ def test_empty_data_dir_shows_not_enough_data_message_and_no_chart(tmp_path):
     text = (site_dir / "index.html").read_text()
     assert not _find_all(_parse(text), "svg")
     lowered = text.lower()
-    assert "not enough data yet" in lowered
     assert "noch nicht genug daten" in lowered
+    assert "not enough data yet" not in lowered
+    en_lowered = (site_dir / "index.en.html").read_text().lower()
+    assert "not enough data yet" in en_lowered
+    assert "noch nicht genug daten" not in en_lowered
     assert "0/14" in text or "0 / 14" in text
+
+
+_ARTICLE_IDS = ["availability", "shortage", "bezirke", "flow", "weather", "footprint"]
+
+
+@pytest.mark.parametrize("state", ["empty", "synthetic"])
+@pytest.mark.parametrize("lang", ["de", "en"])
+def test_lead_callouts_and_contents_list(state, lang, built_empty_site, built_synthetic_site):
+    site_dir = built_empty_site if state == "empty" else built_synthetic_site
+    path = site_dir / ("index.html" if lang == "de" else "index.en.html")
+    assert path.exists()
+    root = _parse(path.read_text())
+
+    leads = [n for n in _find_all(root, "section") if n.attrs.get("class") == "lead"]
+    assert len(leads) == 1
+    lead = leads[0]
+    paragraphs = [n for n in _find_all(lead, "p") if n.attrs.get("class") == "lead-text"]
+    assert paragraphs and _text(paragraphs[0]).strip()
+
+    callouts = [n for n in _find_all(lead, "li") if _find_all(n, "span") and
+                any(s.attrs.get("class") == "callout-number" for s in _find_all(n, "span"))]
+    assert len(callouts) >= (2 if state == "synthetic" else 1)
+    for li in callouts:
+        number = next(s for s in _find_all(li, "span") if s.attrs.get("class") == "callout-number")
+        label = next(s for s in _find_all(li, "span") if s.attrs.get("class") == "callout-label")
+        assert any(ch.isdigit() for ch in _text(number))
+        assert _text(label).strip()
+    if state == "empty":
+        assert len(_find_all(root, "progress")) == 6, "sections carry the not-enough-data component"
+
+    navs = _find_all(lead, "nav")
+    assert len(navs) == 1 and navs[0].attrs.get("aria-label")
+    hrefs = {a.attrs.get("href") for a in _find_all(navs[0], "a")}
+    for sid in _ARTICLE_IDS:
+        assert f"#{sid}" in hrefs
+    articles = {a.attrs.get("id"): a for a in _find_all(root, "article")}
+    for sid in _ARTICLE_IDS:
+        h2 = _find_all(articles[sid], "h2")[0]
+        assert any(a.attrs.get("href") == f"#{sid}" for a in _find_all(h2, "a"))
+
+    visible = _text(lead)
+    for bad in ("None", "nan"):
+        assert bad not in visible

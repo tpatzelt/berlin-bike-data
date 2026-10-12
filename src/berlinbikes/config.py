@@ -16,6 +16,11 @@ DEFAULT_DOTT_GBFS_URL = "https://gbfs.api.ridedott.com/public/v2/berlin/gbfs.jso
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
+def site_base_url(environ: Mapping[str, str] = os.environ) -> str:
+    """Optional public site URL for absolute og:url / og:image; empty means relative."""
+    return environ.get("BIKES_SITE_BASE_URL", "").strip().rstrip("/")
+
+
 class ConfigError(ValueError):
     """Raised when required configuration is missing or invalid."""
 
@@ -52,6 +57,7 @@ class Settings:
     operator_name: str = "[NAME]"
     operator_address: str = "[ANSCHRIFT]"
     operator_email: str = "[E-MAIL]"
+    site_base_url: str = ""
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> "Settings":
@@ -67,4 +73,5 @@ class Settings:
             operator_name=_optional(environ, "BIKES_OPERATOR_NAME", "[NAME]"),
             operator_address=_optional(environ, "BIKES_OPERATOR_ADDRESS", "[ANSCHRIFT]"),
             operator_email=_optional(environ, "BIKES_OPERATOR_EMAIL", "[E-MAIL]"),
+            site_base_url=site_base_url(environ),
         )

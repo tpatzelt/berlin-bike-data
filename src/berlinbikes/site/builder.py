@@ -18,27 +18,51 @@ from berlinbikes.site.charts import (
     bezirk_availability_chart,
     flow_chart,
     footprint_chart,
+    MAP_BINS,
+    MAP_DEFAULT_HOUR,
+    MAP_NO_DATA_RADIUS,
+    map_profile_chart,
+    Y_TICK_TARGET,
     shortage_chart,
     weather_effect_chart,
 )
-from berlinbikes.site.profiles import write_profiles_json
+from berlinbikes.site.i18n import LANGS, t
+from berlinbikes.site.profiles import profiles_payload, write_profiles_json
 from berlinbikes.site.sources import DATA_SOURCES
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _STATIC_DIR = Path(__file__).parent / "static"
 
+OG_IMAGE = "og-image.png"
+OG_IMAGE_SIZE = (1200, 630)
+FAVICON = "favicon.svg"
+OG_LOCALES = {"de": "de_DE", "en": "en_GB"}
+
 PAGES = ("index.html", "map.html", "methodology.html", "impressum.html", "datenschutz.html")
+
+
+def page_url(page: str, lang: str) -> str:
+    """File name of ``page`` (a German ``PAGES`` entry) in ``lang``."""
+    if lang == "de":
+        return page
+    if lang == "en":
+        return page.removesuffix(".html") + ".en.html"
+    raise KeyError(f"unknown language: {lang!r}")
 
 
 DEFAULT_OPERATOR = {"name": "[NAME]", "address": "[ANSCHRIFT]", "email": "[E-MAIL]"}
 
 
-def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, str] | None = None) -> list[Path]:
+def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, str] | None = None, base_url: str = "") -> list[Path]:
     """Render ``PAGES`` and copy static assets into ``site_dir``.
+
+    ``base_url`` (default: empty; the environment is never consulted) makes og:url and og:image
+    absolute; when empty they stay relative.
 
     Writes only under ``site_dir``; never touches the repository.
     """
     site_dir = Path(site_dir)
+    base_url = base_url.rstrip("/")
     site_dir.mkdir(parents=True, exist_ok=True)
 
     env = Environment(
@@ -47,7 +71,16 @@ def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, s
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    map_payload = profiles_payload(data_dir)
+    map_default = map_payload["stations"][0] if map_payload["status"] == "ok" and map_payload["stations"] else None
     context = {
+        "map_payload": map_payload,
+        "map_default": map_default,
+        "map_default_hour": MAP_DEFAULT_HOUR,
+        "map_bins": [{"min": lo, "radius": r, "label_key": f"map.bin.{i}"} for i, (lo, r) in enumerate(MAP_BINS)],
+        "map_no_data_radius": MAP_NO_DATA_RADIUS,
+        "map_y_tick_target": Y_TICK_TARGET,
+        "map_chart": map_profile_chart(map_default["curve"]) if map_default else None,
         "availability_chart": availability_chart(Path(data_dir)),
         "bezirk_availability_chart": bezirk_availability_chart(Path(data_dir)),
         "flow_chart": flow_chart(Path(data_dir)),
@@ -58,18 +91,33 @@ def build_site(data_dir: str | Path, site_dir: str | Path, operator: dict[str, s
         "min_full_days": MIN_FULL_DAYS,
         "rain_mm_threshold": RAIN_MM_THRESHOLD,
         "cold_c_threshold": COLD_C_THRESHOLD,
+        "og_image": OG_IMAGE,
+        "og_image_size": OG_IMAGE_SIZE,
         "operator": operator or DEFAULT_OPERATOR,
     }
 
     written = []
     for page in PAGES:
-        out_path = site_dir / page
-        out_path.write_text(env.get_template(page).render(**context))
-        written.append(out_path)
+        for lang in LANGS:
+            out_path = site_dir / page_url(page, lang)
+            page_context = {
+                **context,
+                "lang": lang,
+                "page": page,
+                "t": lambda key, _lang=lang, **kw: t(key, _lang, **kw),
+                "url": lambda target, _lang=lang: page_url(target, _lang),
+                "og_locale": OG_LOCALES[lang],
+                "abs_url": lambda target: f"{base_url}/{target}" if base_url else target,
+                "page_urls": {other: page_url(page, other) for other in LANGS},
+                "counterpart_lang": "en" if lang == "de" else "de",
+                "counterpart_url": page_url(page, "en" if lang == "de" else "de"),
+            }
+            out_path.write_text(env.get_template(page).render(**page_context))
+            written.append(out_path)
 
-    for asset in ("site.css", "map.js"):
+    for asset in ("site.css", "map.js", OG_IMAGE, FAVICON):
         asset_dst = site_dir / asset
-        asset_dst.write_text((_STATIC_DIR / asset).read_text())
+        asset_dst.write_bytes((_STATIC_DIR / asset).read_bytes())
         written.append(asset_dst)
 
     written.append(write_profiles_json(data_dir, site_dir))

@@ -3,13 +3,72 @@
 from __future__ import annotations
 
 import json
+import re
+from html.parser import HTMLParser
+from pathlib import Path
 
 import pytest
 
+from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.profiles import station_profiles
 from berlinbikes.site import build_site
+from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH, MAP_BINS, MAP_DEFAULT_HOUR, map_profile_chart
+from berlinbikes.site.i18n import STRINGS
+from berlinbikes.site.profiles import profiles_payload
+from tests.helpers.svg import (
+    assert_axes_conventions,
+    assert_no_overlaps_and_inside,
+    chart_elements,
+    contrast_ratio,
+    css_token_blocks,
+    text_boxes,
+)
 from tests.synthetic import EMPTY_STATION_ID
+
+
+class _TableFinder(HTMLParser):
+    """Records the attributes of the <table id="profile-table"> element."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.attrs: dict | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table" and dict(attrs).get("id") == "profile-table":
+            self.attrs = dict(attrs)
+
+
+class _PageHead(HTMLParser):
+    """Records viewport meta, stylesheets, scripts and links (noscript ones apart)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.viewport: list[str | None] = []
+        self.stylesheets: list[dict] = []
+        self.scripts: list[dict] = []
+        self.hrefs: list[str] = []
+        self.noscript_hrefs: list[str] = []
+        self._noscript = 0
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "noscript":
+            self._noscript += 1
+        elif tag == "meta" and a.get("name") == "viewport":
+            self.viewport.append(a.get("content"))
+        elif tag == "link" and a.get("rel") == "stylesheet":
+            self.stylesheets.append(a)
+        elif tag == "script" and "src" in a:
+            self.scripts.append(a)
+        elif tag == "a" and "href" in a:
+            self.hrefs.append(a["href"])
+            if self._noscript:
+                self.noscript_hrefs.append(a["href"])
+
+    def handle_endtag(self, tag):
+        if tag == "noscript" and self._noscript:
+            self._noscript -= 1
 
 
 @pytest.fixture(scope="module")
@@ -19,19 +78,35 @@ def map_site(synthetic_data_dir, tmp_path_factory):
     return site_dir
 
 
-def test_map_page_structure(map_site):
-    html = (map_site / "map.html").read_text()
-    assert '<meta name="viewport" content="width=device-width, initial-scale=1">' in html
-    assert 'href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"' in html
-    assert 'integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="' in html
-    assert 'src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"' in html
-    assert 'integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="' in html
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_map_page_structure(map_site, page):
+    html = (map_site / page).read_text()
+    head = _PageHead()
+    head.feed(html)
+    assert head.viewport == ["width=device-width, initial-scale=1"]
+    css_url = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    js_url = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    css = [link for link in head.stylesheets if link.get("href") == css_url]
+    assert len(css) == 1
+    assert css[0].get("integrity") == "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    assert css[0].get("crossorigin") in ("", "anonymous")
+    js = [script for script in head.scripts if script["src"] == js_url]
+    assert len(js) == 1
+    assert js[0].get("integrity") == "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    assert js[0].get("crossorigin") in ("", "anonymous")
+    external = [s["src"] for s in head.scripts if s["src"].startswith(("http://", "https://"))]
+    assert external == [js_url]
+    controls = _Controls()
+    controls.feed(html)
     for control in ("pick-station", "pick-ortsteil", "pick-weekday"):
-        assert f'<label for="{control}">' in html
-        assert f'<select id="{control}">' in html
-    assert '<table id="profile-table">' in html
-    assert "<noscript>" in html and 'href="data/profiles.json"' in html
-    assert "openstreetmap.org/copyright" in html
+        assert control in controls.labels, control
+        assert control in controls.selects, control
+    finder = _TableFinder()
+    finder.feed(html)
+    assert finder.attrs is not None
+    assert finder.attrs.get("tabindex") == "0"
+    assert "data/profiles.json" in head.noscript_hrefs
+    assert any("openstreetmap.org/copyright" in href for href in head.hrefs)
 
 
 def test_every_page_links_the_map(map_site):
@@ -70,6 +145,9 @@ def test_profiles_json_without_data(tmp_path):
     payload = json.loads((tmp_path / "site" / "data" / "profiles.json").read_text())
     assert payload["status"] == "insufficient_data"
     assert payload["full_days"] == 0
+    assert payload["min_full_days"] == MIN_FULL_DAYS
+    js = (tmp_path / "site" / "map.js").read_text()
+    assert js and not re.search(r"\b14\b", js)
 
 
 def test_legal_pages_render_operator_details_and_third_parties(map_site, tmp_path):
@@ -77,7 +155,472 @@ def test_legal_pages_render_operator_details_and_third_parties(map_site, tmp_pat
     assert "Erika Muster" in impressum and "Musterstr. 1" in impressum and "[NAME]" not in impressum
     privacy = (map_site / "datenschutz.html").read_text()
     assert "tile.openstreetmap.org" in privacy and "unpkg.com" in privacy and "Cloudflare" in privacy
+    privacy_en = (map_site / "datenschutz.en.html").read_text()
+    assert "tile.openstreetmap.org" in privacy_en and "unpkg.com" in privacy_en and "Cloudflare" in privacy_en
 
     (tmp_path / "d").mkdir()
     build_site(tmp_path / "d", tmp_path / "s")
     assert "[NAME]" in (tmp_path / "s" / "impressum.html").read_text()
+
+
+class _LangCollector(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.html_lang = None
+        self.nested_langs = []
+        self.i18n_json = None
+        self._in_i18n = False
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "html":
+            self.html_lang = a.get("lang")
+        elif a.get("lang") and not (tag == "a" and "lang-switch" in (a.get("class") or "")):
+            self.nested_langs.append(a["lang"])
+        if tag == "script" and a.get("id") == "map-i18n":
+            self._in_i18n = True
+
+    def handle_data(self, data):
+        if self._in_i18n:
+            self.i18n_json = (self.i18n_json or "") + data
+
+    def handle_endtag(self, tag):
+        if tag == "script":
+            self._in_i18n = False
+
+
+def _collect(path):
+    c = _LangCollector()
+    c.feed(path.read_text())
+    return c
+
+
+def test_map_pages_are_single_language(map_site):
+    de, en = _collect(map_site / "map.html"), _collect(map_site / "map.en.html")
+    assert (de.html_lang, en.html_lang) == ("de", "en")
+    assert de.nested_langs == [] and en.nested_langs == []
+    for page in ("map.html", "map.en.html"):
+        assert " / " not in (map_site / page).read_text().split("<main", 1)[1].split("</main>")[0].replace("14", "")
+
+
+def test_map_i18n_json_is_per_language_and_complete(map_site):
+    de = json.loads(_collect(map_site / "map.html").i18n_json)
+    en = json.loads(_collect(map_site / "map.en.html").i18n_json)
+    assert set(de) == set(en) == {"days", "ortsteil_title", "load_error", "hour", "plot", "axis_x", "axis_y", "headline", "x_ticks", "y_tick_target", "ortsteil_button", "bins", "bin_mins", "bin_labels", "bin_none", "no_data_radius", "marker_label"}
+    assert de["days"] == "({n} Tage)" and en["days"] == "({n} days)"
+    assert de["load_error"].startswith("Daten") and en["load_error"].startswith("Could not")
+    assert en["ortsteil_title"] == "Ortsteil {name}"
+
+
+def test_map_js_has_no_inline_bilingual_strings():
+    js = (Path(__file__).parent.parent / "src/berlinbikes/site/static/map.js").read_text()
+    js = "\n".join(line for line in js.splitlines() if not line.lstrip().startswith("//"))
+    for fragment in ("Tage", " days", "Could not", "Daten konnten", "Ortsteil ", "data.message"):
+        assert fragment not in js
+    assert "map-i18n" in js
+
+
+@pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
+def test_map_weekday_options_follow_page_language(map_site, page, lang):
+    controls = _Controls()
+    controls.feed((map_site / page).read_text())
+    options = controls.weekday_options
+    assert [value for value, _, _ in options] == [str(i) for i in range(7)]
+    assert [value for value, sel, _ in options if sel] == ["0"]
+    assert [text for _, _, text in options] == [STRINGS[f"map.weekday.{i}"][lang] for i in range(7)]
+    assert controls.labels["pick-weekday"].strip() == STRINGS["map.label.weekday"][lang]
+
+
+@pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
+def test_map_station_and_ortsteil_labels_follow_page_language(map_site, page, lang):
+    controls = _Controls()
+    controls.feed((map_site / page).read_text())
+    assert {"pick-station", "pick-ortsteil"} <= controls.labels.keys()
+    assert controls.labels["pick-station"].strip() == STRINGS["map.label.station"][lang]
+    assert controls.labels["pick-ortsteil"].strip() == STRINGS["map.label.ortsteil"][lang]
+
+
+def test_legal_pages_are_one_language_each_with_operator_block(map_site):
+    for page in ("impressum", "datenschutz"):
+        de = (map_site / f"{page}.html").read_text()
+        en = (map_site / f"{page}.en.html").read_text()
+        assert "<section" not in de and "<section" not in en
+        for html in (de, en):
+            assert "<address>" in html and "Musterstr. 1" in html
+    imp_de = (map_site / "impressum.html").read_text()
+    imp_en = (map_site / "impressum.en.html").read_text()
+    assert "Angaben gemäß § 5 DDG" in imp_de and "A private, non-commercial" not in imp_de
+    assert "A private, non-commercial" in imp_en and "Angaben gemäß" not in imp_en
+    ds_de = (map_site / "datenschutz.html").read_text()
+    ds_en = (map_site / "datenschutz.en.html").read_text()
+    assert "Ihre Rechte" in ds_de and "Ihre Rechte" not in ds_en
+    assert "No cookies, no analytics" in ds_en and "No cookies, no analytics" not in ds_de
+
+
+class _Options(HTMLParser):
+    """Option values per <select id>, the selected one, plus the profile table's body rows."""
+
+    def __init__(self):
+        super().__init__()
+        self.select = None
+        self.options: dict[str, list[tuple[str, bool]]] = {}
+        self.rows: list[list[str]] = []
+        self._in_tbody = False
+        self._cells: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "select":
+            self.select = a["id"]
+            self.options[self.select] = []
+        elif tag == "option" and self.select:
+            self.options[self.select].append((a.get("value", ""), "selected" in a))
+        elif tag == "tbody":
+            self._in_tbody = True
+        elif tag == "tr" and self._in_tbody:
+            self._cells = []
+
+    def handle_endtag(self, tag):
+        if tag == "select":
+            self.select = None
+        elif tag == "tbody":
+            self._in_tbody = False
+        elif tag == "tr" and self._cells is not None:
+            self.rows.append(self._cells)
+            self._cells = None
+
+    def handle_data(self, data):
+        if self._cells is not None and data.strip():
+            self._cells.append(data.strip())
+
+
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_map_page_without_js_has_options_curve_and_table(map_site, synthetic_data_dir, page):
+    html = (map_site / page).read_text()
+    payload = profiles_payload(synthetic_data_dir)
+    parsed = _Options()
+    parsed.feed(html)
+    stations = parsed.options["pick-station"]
+    assert [v for v, _ in stations[1:]] == [s["id"] for s in payload["stations"]]
+    assert [v for v, sel in stations if sel] == [payload["stations"][0]["id"]]
+    assert [v for v, _ in parsed.options["pick-ortsteil"][1:]] == [o["name"] for o in payload["ortsteile"]]
+    assert len(parsed.rows) == 24 and all(len(r) == 2 for r in parsed.rows)
+    curve = payload["stations"][0]["curve"][0]
+    assert [r[1] for r in parsed.rows] == ["–" if v is None else str(v) for v in curve]
+    els = assert_axes_conventions(html)
+    assert any(e["tag"] == "polyline" for e in els)
+    figure = html[html.index('<svg id="profile-chart"') :]
+    assert chart_elements(figure)[0]["attrs"]["id"] == "profile-chart"
+    assert f"{MAP_DEFAULT_HOUR}:00" in next(e["text"] for e in els if e["tag"] == "text" and "headline" in e["groups"])
+
+
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_map_chart_text_boxes_do_not_overlap(map_site, page):
+    html = (map_site / page).read_text()
+    start = html.index('<svg id="profile-chart"')
+    tag = html[start : html.index(">", start)]
+    width, height = (float(v) for v in re.search(r'viewBox="([^"]+)"', tag).group(1).split()[2:])
+    boxes = text_boxes(chart_elements(html[start:]), CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH)
+    assert len(boxes) > 10
+    assert any(f"{MAP_DEFAULT_HOUR}:00" in b[0] for b in boxes)
+    assert_no_overlaps_and_inside(boxes, width, height)
+
+
+def test_map_profile_chart_marks_the_hour_on_g2_axes():
+    curve = [[float(h) for h in range(24)] for _ in range(7)]
+    chart = map_profile_chart(curve, weekday=2, hour=10)
+    assert chart.axes.y_min == 0 and chart.axes.y_max >= 23
+    assert chart.headline.hour == 10 and chart.headline.value == 10.0
+    assert len(chart.points.split()) == 24
+    gappy = [[None] * 24 for _ in range(7)]
+    gappy[0][3] = 4.0
+    chart = map_profile_chart(gappy)
+    assert chart.headline is None and len(chart.points.split()) == 1
+    assert CHART_FONT_SIZE == chart.axes.font_size
+
+
+def test_map_page_without_data_shows_not_enough_data(tmp_path):
+    (tmp_path / "data").mkdir()
+    build_site(tmp_path / "data", tmp_path / "site")
+    html = (tmp_path / "site" / "map.html").read_text()
+    assert 'class="not-enough-data"' in html and "<progress" in html
+    assert 'id="profile-chart"' not in html
+    parsed = _Options()
+    parsed.feed(html)
+    assert parsed.options["pick-station"] == [("", False)] and parsed.rows == []
+
+
+def test_map_css_places_map_and_profile_side_by_side_on_wide_screens():
+    css = (Path(__file__).parent.parent / "src/berlinbikes/site/static/site.css").read_text()
+    assert re.search(r"@media \(min-width: [\d.]+rem\)\s*\{\s*\.map-layout\s*\{[^}]*grid-template-columns: repeat\(2", css)
+    assert re.search(r"\.map-layout \{[^}]*grid-template-columns: minmax\(0, 1fr\)", css)
+
+
+def test_map_js_replaces_prefilled_options():
+    js = (Path(__file__).parent.parent / "src/berlinbikes/site/static/map.js").read_text()
+    assert "fillSelect(" in js and "select.remove(1)" in js
+
+
+_JS = Path(__file__).parent.parent / "src/berlinbikes/site/static/map.js"
+
+
+def test_map_js_round_trips_the_selection_through_the_hash():
+    assert _JS.exists()
+    js = "\n".join(l for l in _JS.read_text().splitlines() if not l.lstrip().startswith("//"))
+    assert "hashchange" in js and "history.replaceState" in js and "location.hash" in js
+    assert "encodeURIComponent" in js and "decodeURIComponent" in js
+    assert 'pick-hour' in js
+    # the marked hour comes from the picker, never a literal
+    assert not re.search(r"\[\s*8\s*\]|hour\s*[=:]\s*8\b|x\(\s*8\s*\)", js)
+    assert "[0, 4, 8" not in js and "/ 23" not in js
+
+
+def test_map_js_tick_values_come_from_the_server():
+    js = _JS.read_text()
+    assert "I18N.x_ticks" in js and "I18N.y_tick_target" in js and "niceTicks(" in js
+
+
+class _Controls(HTMLParser):
+    """Labels by for=, <input> attrs by id, the datalist and select ids, and the pick-hour
+    and pick-weekday options."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.labels: dict[str, str] = {}
+        self.inputs: dict[str, dict] = {}
+        self.datalists: set[str] = set()
+        self.hour_options: list[tuple[str, bool]] = []
+        self.weekday_options: list[tuple[str, bool, str]] = []
+        self.selects: set[str] = set()
+        self.show_ortsteil = False
+        self._label: str | None = None
+        self._select: str | None = None
+        self._in_weekday_option = False
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "label" and a.get("for"):
+            self._label = a["for"]
+            self.labels[self._label] = ""
+        elif tag == "input" and a.get("id"):
+            self.inputs[a["id"]] = a
+        elif tag == "datalist" and a.get("id"):
+            self.datalists.add(a["id"])
+        elif tag == "select":
+            self._select = a.get("id")
+            if self._select:
+                self.selects.add(self._select)
+        elif tag == "option" and self._select == "pick-hour":
+            self.hour_options.append((a.get("value"), "selected" in a))
+        elif tag == "option" and self._select == "pick-weekday":
+            self.weekday_options.append((a.get("value"), "selected" in a, ""))
+            self._in_weekday_option = True
+        if a.get("id") == "show-ortsteil":
+            self.show_ortsteil = True
+
+    def handle_endtag(self, tag):
+        if tag == "label":
+            self._label = None
+        elif tag == "select":
+            self._select = None
+        elif tag == "option":
+            self._in_weekday_option = False
+
+    def handle_data(self, data):
+        if self._label:
+            self.labels[self._label] += data
+        if self._in_weekday_option:
+            value, sel, text = self.weekday_options[-1]
+            self.weekday_options[-1] = (value, sel, text + data)
+
+
+@pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
+def test_map_page_has_hour_picker_search_and_ortsteil_button(map_site, page, lang):
+    html = (map_site / page).read_text()
+    controls = _Controls()
+    controls.feed(html)
+    assert "pick-hour" in controls.labels and "pick-search" in controls.labels
+    assert controls.labels["pick-search"].strip() == STRINGS["map.label.search"][lang]
+    assert controls.labels["pick-hour"].strip() == STRINGS["map.label.hour"][lang]
+    assert len(controls.hour_options) >= 24
+    selected = [v for v, sel in controls.hour_options if sel]
+    assert selected == [str(MAP_DEFAULT_HOUR)]
+    assert "pick-search" in controls.inputs
+    assert controls.inputs["pick-search"].get("list") == "station-names"
+    assert "station-names" in controls.datalists
+    i18n = json.loads(_collect(map_site / page).i18n_json)
+    assert i18n["ortsteil_button"] == STRINGS["map.ortsteil_button"][lang]
+    assert i18n["x_ticks"][0] == 0 and i18n["y_tick_target"] >= 1
+    assert controls.show_ortsteil
+
+
+@pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
+def test_map_page_has_a_legend_with_every_bin_swatch_size_and_label(map_site, page, lang):
+    html = (map_site / page).read_text()
+    assert 'id="map-legend"' in html
+    legend = html[html.index('id="map-legend"'):html.index('class="map-layout"')]
+    labels = {
+        "de": ["0 Räder", "unter 1 Rad", "1–3 Räder", "3 oder mehr Räder", "keine Daten"],
+        "en": ["0 bikes", "under 1 bike", "1–3 bikes", "3 or more bikes", "no data"],
+    }[lang]
+    for label in labels:
+        assert label in legend
+    radii = [int(r) for r in re.findall(r'<circle class="avail-\d"[^>]* r="(\d+)"', legend)]
+    assert len(radii) == len(MAP_BINS) == 4
+    assert radii == [r for _, r in MAP_BINS]
+    assert len(set(radii)) == len(radii)  # size is a second cue besides colour
+    i18n = json.loads(_collect(map_site / page).i18n_json)
+    assert i18n["bin_labels"] == labels[:-1] and i18n["bin_none"] == labels[-1]
+    assert i18n["bins"] == radii and i18n["bin_mins"] == [lo for lo, _ in MAP_BINS]
+    assert "{name}" in i18n["marker_label"] and "{bin}" in i18n["marker_label"]
+
+
+def test_map_js_names_markers_from_catalog_strings_and_bins_from_the_page():
+    js = _JS.read_text()
+    assert 'setAttribute("aria-label"' in js and 'setAttribute("role", "button")' in js
+    assert "I18N.marker_label" in js and "I18N.bin_labels" in js and "I18N.bin_mins" in js
+    assert "getElement()" in js and "setRadius(" in js
+    assert not re.search(r"\b(?:Räder|bikes)\b", js)
+
+
+def test_avail_tokens_exist_in_both_themes_and_have_contrast(map_site):
+    css = (map_site / "site.css").read_text()
+    for tokens in css_token_blocks(css):
+        for i in range(len(MAP_BINS)):
+            assert f"--avail-{i}" in tokens, i
+            assert contrast_ratio(tokens[f"--avail-{i}"], tokens["--bg"]) >= 3
+    for i in range(len(MAP_BINS)):
+        assert f".avail-{i} " in css
+
+
+def test_english_map_strings_use_ortsteil_not_district():
+    map_keys = [k for k in STRINGS if k.startswith("map.")]
+    assert map_keys
+    assert not [k for k in map_keys if "district" in STRINGS[k]["en"].lower()]
+
+
+def test_map_js_normalises_padded_hash_numbers_and_labels_stations_with_ortsteil():
+    assert _JS.exists()
+    js = _JS.read_text()
+    assert "? String(Number(text)) : null" in js
+    label = js.split("function stationLabel(station)")[1].split("\n  }")[0]
+    assert re.search(r"return\s+station\.label\s*;", label)
+    assert "station.ortsteil" not in label
+    assert "list.appendChild(option(stationLabel(s)" in js
+
+
+class _StationOptions(HTMLParser):
+    """Datalist option values, pick-station option texts, and the (value, text) of options carrying `selected`.
+
+    Option texts are stripped of surrounding whitespace in select_texts and selected alike.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.datalist: list[str] = []
+        self.select_texts: list[str] = []
+        self.selected: list[tuple[str, str]] = []
+        self._selected_value: str | None = None
+        self._where = None
+        self._text: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "datalist" and a.get("id") == "station-names":
+            self._where = "datalist"
+        elif tag == "select":
+            self._where = "select" if a.get("id") == "pick-station" else None
+        elif tag == "option" and self._where == "datalist":
+            self.datalist.append(a["value"])
+        elif tag == "option" and self._where == "select":
+            self._text = []
+            self._selected_value = a.get("value", "") if "selected" in a else None
+
+    def handle_data(self, data):
+        if self._where == "select":
+            self._text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "option" and self._where == "select":
+            text = "".join(self._text).strip()
+            self.select_texts.append(text)
+            if self._selected_value is not None:
+                self.selected.append((self._selected_value, text))
+                self._selected_value = None
+        elif tag in ("select", "datalist"):
+            self._where = None
+
+
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_station_select_and_search_list_show_name_and_ortsteil(map_site, synthetic_data_dir, page):
+    payload = profiles_payload(synthetic_data_dir)
+    expected = [
+        (s["name"] or s["id"]) + (f" ({s['ortsteil']})" if s["ortsteil"] else "") for s in payload["stations"]
+    ]
+    assert expected and any("(" in label for label in expected)
+    parsed = _StationOptions()
+    parsed.feed((map_site / page).read_text())
+    assert parsed.datalist == expected
+    assert parsed.select_texts[0] == "–"
+    assert parsed.select_texts[1:] == expected
+
+
+def test_map_js_passes_station_label_to_the_pick_station_select():
+    assert _JS.exists()
+    assert re.search(
+        r'fillSelect\(\$\("pick-station"\),\s*data\.stations\.map\(function \(s\) \{\s*return option\(s\.id,\s*stationLabel\(s\)\);',
+        _JS.read_text(),
+    )
+
+
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_profiles_json_labels_are_what_the_map_page_options_show(map_site, page):
+    payload = json.loads((map_site / "data" / "profiles.json").read_text())
+    expected = [
+        (s["name"] or s["id"]) + (f" ({s['ortsteil']})" if s["ortsteil"] else "") for s in payload["stations"]
+    ]
+    assert expected and any("(" in label for label in expected)
+    assert [s["label"] for s in payload["stations"]] == expected
+    parsed = _StationOptions()
+    parsed.feed((map_site / page).read_text())
+    assert parsed.datalist == expected
+    assert parsed.select_texts[1:] == expected
+
+
+class _ProfileTitle(HTMLParser):
+    """Text of every h3#profile-title."""
+
+    def __init__(self):
+        super().__init__()
+        self.titles: list[str] = []
+        self._text: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "h3" and dict(attrs).get("id") == "profile-title":
+            self._text = []
+
+    def handle_data(self, data):
+        if self._text is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "h3" and self._text is not None:
+            self.titles.append("".join(self._text).strip())
+            self._text = None
+
+
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_no_js_profile_title_is_the_default_stations_profiles_json_label(map_site, page):
+    payload = json.loads((map_site / "data" / "profiles.json").read_text())
+    assert payload["stations"]
+    default = payload["stations"][0]
+    assert default["label"]
+    html = (map_site / page).read_text()
+    parsed = _ProfileTitle()
+    parsed.feed(html)
+    assert parsed.titles == [default["label"]]
+    # the default station is the one preselected in the no-JS select
+    select = _StationOptions()
+    select.feed(html)
+    assert len(select.selected) == 1
+    assert select.selected[0] == (default["id"], default["label"])

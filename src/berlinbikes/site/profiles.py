@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.profiles import ortsteil_profiles, station_profiles
 
@@ -19,20 +20,28 @@ def _empty_curve() -> list[list[float | None]]:
     return [[None] * 24 for _ in range(7)]
 
 
+def _station_label(station_id: str, name: str | None, ortsteil: str | None) -> str:
+    label = name or station_id
+    return f"{label} ({ortsteil})" if ortsteil else label
+
+
 def profiles_payload(data_dir: str | Path) -> dict:
     """The JSON document behind ``map.html``.
 
     ``{"status": "ok", "full_days": N, "stations": [{"id", "name", "lat",
-    "lon", "ortsteil", "curve"}], "ortsteile": [{"name", "curve"}]}`` where
+    "lon", "ortsteil", "label", "curve"}], "ortsteile": [{"name", "curve"}]}`` where
     each ``curve`` is 7 weekday lists (Monday first) of 24 hourly means,
-    rounded to 1 decimal, ``null`` where there is no data. Below the
+    rounded to 1 decimal, ``null`` where there is no data. ``label`` is
+    "Name (Ortsteil)": the id for an unnamed station, no suffix without an
+    Ortsteil. Below the
     14-full-day minimum: ``{"status": "insufficient_data", "full_days": N,
-    "message": ...}``.
+    "min_full_days": 14, "message": ...}``.
     """
     con = connect(Path(data_dir))
     stations = station_profiles(con)
     if stations.status != "ok":
-        return {"status": stations.status, "full_days": stations.full_days, "message": stations.message}
+        return {"status": stations.status, "full_days": stations.full_days,
+                "min_full_days": MIN_FULL_DAYS, "message": stations.message}
     ortsteile = ortsteil_profiles(con)
 
     by_station: dict[str, dict] = {}
@@ -40,7 +49,7 @@ def profiles_payload(data_dir: str | Path) -> dict:
         entry = by_station.setdefault(
             station_id,
             {"id": station_id, "name": name, "lat": round(lat, 5), "lon": round(lon, 5), "ortsteil": ortsteil,
-             "curve": _empty_curve()},
+             "label": _station_label(station_id, name, ortsteil), "curve": _empty_curve()},
         )
         entry["curve"][weekday][hour] = round(mean, 1)
 
