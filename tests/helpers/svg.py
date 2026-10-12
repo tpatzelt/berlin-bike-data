@@ -7,6 +7,10 @@ from html.parser import HTMLParser
 
 from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH
 
+# Locate the :root and dark-mode token blocks read by the G3 token test and the G5 contrast test.
+ROOT_BLOCK_PATTERN = re.compile(r":root\s*{([^}]*)}")
+DARK_BLOCK_PATTERN = re.compile(r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}")
+
 
 class _Svg(HTMLParser):
     """Collects the first <svg class="chart"> subtree as (tag, attrs, class-path, text) rows."""
@@ -169,10 +173,6 @@ def svg_font_size(html: str, cls: str) -> float:
     els = chart_by_class(html, cls)
     assert els and els[0]["tag"] == "svg", f"no chart svg with class {cls}"
     return float(els[0]["attrs"]["font-size"])
-
-
-ROOT_BLOCK_PATTERN = re.compile(r":root\s*{([^}]*)}")
-DARK_BLOCK_PATTERN = re.compile(r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}")
 
 
 def css_raw_token_blocks(css: str) -> tuple[str, str]:
