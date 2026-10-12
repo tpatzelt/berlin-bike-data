@@ -63,10 +63,28 @@ def either_page(request, site_dir) -> str:
     return (site_dir / request.param).read_text()
 
 
-def test_every_data_source_name_and_license_is_named(either_page):
+def test_every_data_source_name_and_license_is_named(methodology_html, methodology_en_html):
     for source in DATA_SOURCES:
-        assert source.name in either_page, source.name
-        assert source.license in either_page, source.license
+        assert source.name in methodology_html and source.name in methodology_en_html
+        assert source.license_de in methodology_html, source.license_de
+        assert source.license_en in methodology_en_html, source.license_en
+
+
+def test_license_and_url_note_are_in_the_page_language(methodology_html, methodology_en_html):
+    for source in DATA_SOURCES:
+        assert source.license_de and source.license_en
+        if source.license_de != source.license_en:
+            assert source.license_en not in methodology_html, source.license_en
+            assert source.license_de not in methodology_en_html, source.license_de
+        if source.url_note_de or source.url_note_en:
+            assert source.url_note_de and source.url_note_en
+            assert source.url_note_de in methodology_html
+            assert source.url_note_en in methodology_en_html
+            if source.url_note_de != source.url_note_en:
+                assert source.url_note_en not in methodology_html
+                assert source.url_note_de not in methodology_en_html
+    assert any(s.url_note_de for s in DATA_SOURCES)
+    assert any(s.license_de != s.license_en for s in DATA_SOURCES)
 
 
 def test_used_for_column_is_in_the_page_language(methodology_html, methodology_en_html):
