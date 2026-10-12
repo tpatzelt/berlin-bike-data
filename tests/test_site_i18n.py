@@ -81,10 +81,37 @@ def test_hreflang_alternates_and_switch(site, page, lang):
     assert set(parsed.lang_attrs_in_header) <= {switch["lang"]}
 
 
-def test_titles_come_from_catalog(site):
+class _Title(HTMLParser):
+    """Collect the text of every ``<title>`` element."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.titles: list[str] = []
+        self._in_title = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "title":
+            self._in_title = True
+            self.titles.append("")
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self._in_title = False
+
+    def handle_data(self, data):
+        if self._in_title:
+            self.titles[-1] += data
+
+
+@pytest.mark.parametrize("page", PAGES)
+@pytest.mark.parametrize("lang", ("de", "en"))
+def test_titles_come_from_catalog(site, page, lang):
     out, _ = site
-    assert "<title>How Berlin Rides</title>" in (out / "index.en.html").read_text()
-    assert "<title>Methodik</title>" in (out / "methodology.html").read_text()
+    parser = _Title()
+    parser.feed((out / (page if lang == "de" else _en(page))).read_text())
+    assert len(parser.titles) == 1
+    expected = STRINGS[f"title.{page.removesuffix('.html')}"][lang]
+    assert parser.titles[0].strip() == expected
 
 
 def _placeholders(text: str) -> set[str]:
