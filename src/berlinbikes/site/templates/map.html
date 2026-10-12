@@ -8,6 +8,8 @@
 <script src="map.js" defer></script>
 {% endblock %}
 {% block content %}
+{# Must match stationLabel() in map.js. #}
+{% macro station_label(s) %}{{ (s.name or s.id) ~ (" (" ~ s.ortsteil ~ ")" if s.ortsteil else "") }}{% endmacro %}
 {% import "_chart.html" as chart with context %}
 <h2>{{ t("map.heading") }}</h2>
 <p>{{ t("map.intro") }}</p>
@@ -40,13 +42,13 @@
 <label for="pick-search">{{ t("map.label.search") }}</label>
 <input id="pick-search" type="search" list="station-names" autocomplete="off" placeholder="{{ t("map.search.placeholder") }}">
 <datalist id="station-names">
-{% if map_default %}{% for s in map_payload.stations %}<option value="{{ (s.name or s.id) ~ (" (" ~ s.ortsteil ~ ")" if s.ortsteil else "") }}">
+{% if map_default %}{% for s in map_payload.stations %}<option value="{{ station_label(s) }}">
 {% endfor %}{% endif %}</datalist>
 </p>
 <p>
 <label for="pick-station">{{ t("map.label.station") }}</label>
 <select id="pick-station"><option value="">–</option>
-{% if map_default %}{% for s in map_payload.stations %}<option value="{{ s.id }}"{% if s.id == map_default.id %} selected{% endif %}>{{ s.name or s.id }}</option>
+{% if map_default %}{% for s in map_payload.stations %}<option value="{{ s.id }}"{% if s.id == map_default.id %} selected{% endif %}>{{ station_label(s) }}</option>
 {% endfor %}{% endif %}</select>
 </p>
 <p>
@@ -80,7 +82,7 @@
 <div class="map-detail">
 {% if map_chart %}
 <figure class="map-profile">
-<h3 id="profile-title">{{ map_default.name or map_default.id }}{% if map_default.ortsteil %} ({{ map_default.ortsteil }}){% endif %}</h3>
+<h3 id="profile-title">{{ station_label(map_default) }}</h3>
 <button type="button" id="show-ortsteil" class="show-ortsteil" hidden></button>
 <svg id="profile-chart" class="chart" viewBox="{{ map_chart.view_box }}" font-size="{{ map_chart.axes.font_size }}" role="img" aria-label="{{ t("map.chart.aria") }}">
 {{ chart.axes_frame(map_chart.axes, t("map.axis.x"), t("map.axis.y")) }}
