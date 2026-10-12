@@ -39,6 +39,38 @@ class _TableFinder(HTMLParser):
             self.attrs = dict(attrs)
 
 
+class _PageHead(HTMLParser):
+    """Records viewport meta, stylesheets, scripts and links (noscript ones apart)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.viewport: list[str | None] = []
+        self.stylesheets: list[dict] = []
+        self.scripts: list[dict] = []
+        self.hrefs: list[str] = []
+        self.noscript_hrefs: list[str] = []
+        self._noscript = 0
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "noscript":
+            self._noscript += 1
+        elif tag == "meta" and a.get("name") == "viewport":
+            self.viewport.append(a.get("content"))
+        elif tag == "link" and a.get("rel") == "stylesheet":
+            self.stylesheets.append(a)
+        elif tag == "script" and "src" in a:
+            self.scripts.append(a)
+        elif tag == "a" and "href" in a:
+            self.hrefs.append(a["href"])
+            if self._noscript:
+                self.noscript_hrefs.append(a["href"])
+
+    def handle_endtag(self, tag):
+        if tag == "noscript" and self._noscript:
+            self._noscript -= 1
+
+
 @pytest.fixture(scope="module")
 def map_site(synthetic_data_dir, tmp_path_factory):
     site_dir = tmp_path_factory.mktemp("map_site")
@@ -46,13 +78,24 @@ def map_site(synthetic_data_dir, tmp_path_factory):
     return site_dir
 
 
-def test_map_page_structure(map_site):
-    html = (map_site / "map.html").read_text()
-    assert '<meta name="viewport" content="width=device-width, initial-scale=1">' in html
-    assert 'href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"' in html
-    assert 'integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="' in html
-    assert 'src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"' in html
-    assert 'integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="' in html
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_map_page_structure(map_site, page):
+    html = (map_site / page).read_text()
+    head = _PageHead()
+    head.feed(html)
+    assert head.viewport == ["width=device-width, initial-scale=1"]
+    css_url = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    js_url = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    css = [link for link in head.stylesheets if link.get("href") == css_url]
+    assert len(css) == 1
+    assert css[0].get("integrity") == "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    assert "crossorigin" in css[0]
+    js = [script for script in head.scripts if script["src"] == js_url]
+    assert len(js) == 1
+    assert js[0].get("integrity") == "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    assert "crossorigin" in js[0]
+    external = [s["src"] for s in head.scripts if s["src"].startswith(("http://", "https://"))]
+    assert external == [js_url]
     controls = _Controls()
     controls.feed(html)
     for control in ("pick-station", "pick-ortsteil", "pick-weekday"):
@@ -62,8 +105,8 @@ def test_map_page_structure(map_site):
     finder.feed(html)
     assert finder.attrs is not None
     assert finder.attrs.get("tabindex") == "0"
-    assert "<noscript>" in html and 'href="data/profiles.json"' in html
-    assert "openstreetmap.org/copyright" in html
+    assert "data/profiles.json" in head.noscript_hrefs
+    assert any("openstreetmap.org/copyright" in href for href in head.hrefs)
 
 
 def test_every_page_links_the_map(map_site):
