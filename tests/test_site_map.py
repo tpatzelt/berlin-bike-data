@@ -444,3 +444,40 @@ def test_profiles_json_labels_are_what_the_map_page_options_show(map_site, page)
     parsed.feed((map_site / page).read_text())
     assert parsed.datalist == expected
     assert parsed.select_texts[1:] == expected
+
+
+class _ProfileTitle(HTMLParser):
+    """Text of every h3#profile-title."""
+
+    def __init__(self):
+        super().__init__()
+        self.titles: list[str] = []
+        self._text: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "h3" and dict(attrs).get("id") == "profile-title":
+            self._text = []
+
+    def handle_data(self, data):
+        if self._text is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "h3" and self._text is not None:
+            self.titles.append("".join(self._text).strip())
+            self._text = None
+
+
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_no_js_profile_title_is_the_default_stations_profiles_json_label(map_site, page):
+    payload = json.loads((map_site / "data" / "profiles.json").read_text())
+    assert payload["stations"]
+    default = payload["stations"][0]
+    assert default["label"]
+    parsed = _ProfileTitle()
+    parsed.feed((map_site / page).read_text())
+    assert parsed.titles == [default["label"]]
+    # the default station is the one preselected in the no-JS select
+    select = _StationOptions()
+    select.feed((map_site / page).read_text())
+    assert select.select_texts[1] == parsed.titles[0]
