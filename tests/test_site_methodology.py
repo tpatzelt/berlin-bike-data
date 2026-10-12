@@ -16,6 +16,7 @@ import pytest
 from berlinbikes.analysis import MIN_FULL_DAYS
 from berlinbikes.analysis.weather_effect import COLD_C_THRESHOLD, RAIN_MM_THRESHOLD
 from berlinbikes.site import PAGES
+from berlinbikes.site.i18n import STRINGS
 from berlinbikes.site.sources import DATA_SOURCES
 
 
@@ -142,17 +143,74 @@ def test_mentions_proportional_bezirk_flow_inference(either_page):
     assert "proportional" in lowered
 
 
-def test_page_outline_is_h1_then_one_sources_h2_before_the_table(either_page):
-    assert either_page.count("<h1>") == 1
-    assert either_page.count("<h2>") == 1
-    assert "<h3" not in either_page
-    h2 = either_page.index("<h2>")
-    assert either_page.index("<h1>") < h2
-    heading = either_page[h2 + len("<h2>") : either_page.index("</h2>")]
-    assert heading in {"Datenquellen", "Data sources"}
-    assert h2 < either_page.index('<table class="sources-table">')
+class _OutlineParser(HTMLParser):
+    """Collects headings in order, and the text of every .source-url span."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.headings: list[tuple[str, str]] = []
+        self.source_urls: list[str] = []
+        self.first_p_index: int | None = None
+        self.table_index: int | None = None
+        self._events = 0
+        self._open: str | None = None
+        self._buf = ""
+        self.h2_index: int | None = None
+
+    def handle_starttag(self, tag, attrs):
+        self._events += 1
+        cls = (dict(attrs).get("class") or "").split()
+        if tag == "p" and self.first_p_index is None:
+            self.first_p_index = self._events
+        elif tag == "table" and "sources-table" in cls:
+            self.table_index = self._events
+        if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            self._open, self._buf = tag, ""
+            if tag == "h2":
+                self.h2_index = self._events
+        elif tag == "span" and "source-url" in cls:
+            self._open, self._buf = "span", ""
+
+    def handle_data(self, data):
+        if self._open:
+            self._buf += data
+
+    def handle_endtag(self, tag):
+        if tag == self._open:
+            if tag == "span":
+                self.source_urls.append(self._buf)
+            else:
+                self.headings.append((tag, self._buf))
+            self._open = None
+
+
+def _outline(html_text: str) -> _OutlineParser:
+    parser = _OutlineParser()
+    parser.feed(html_text)
+    return parser
+
+
+@pytest.mark.parametrize(
+    ("page", "lang"), [("methodology.html", "de"), ("methodology.en.html", "en")]
+)
+def test_page_outline_is_h1_then_one_sources_h2_before_the_table(site_dir, page, lang):
+    outline = _outline((site_dir / page).read_text())
+    assert [tag for tag, _ in outline.headings] == ["h1", "h2"]
+    assert outline.headings[1][1] == STRINGS["methodology.h2"][lang]
+    assert outline.table_index is not None and outline.h2_index is not None
+    assert outline.h2_index < outline.table_index
     # No h2 sits directly under the h1: the lead paragraph comes first.
-    assert either_page.index("<h1>") < either_page.index("<p") < h2
+    assert outline.first_p_index is not None
+    assert outline.first_p_index < outline.h2_index
+
+
+@pytest.mark.parametrize("page", ["methodology.html", "methodology.en.html"])
+def test_source_url_spans_hold_only_a_bare_url(site_dir, page):
+    urls = _outline((site_dir / page).read_text()).source_urls
+    assert len(urls) == len(DATA_SOURCES) > 0
+    for url in urls:
+        assert url and not any(ch.isspace() for ch in url), url
+    assert urls == [source.url for source in DATA_SOURCES]
 
 
 def test_first_paragraph_is_the_shared_lead(either_page):
