@@ -20,7 +20,7 @@ import pytest
 
 from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.weather_effect import COLD_C_THRESHOLD, RAIN_MM_THRESHOLD, weather_effect
-from berlinbikes.site import build_site
+from berlinbikes.site import build_site, charts
 from berlinbikes.site.charts import (
     CHART_FONT_SIZE,
     WEATHER_HEADLINE_CHARS,
@@ -309,19 +309,15 @@ def test_missing_bucket_marks_only_the_present_one():
 
 
 def test_weather_bucket_color_indexes_wrap_through_series_colors(monkeypatch):
-    from berlinbikes.site import charts
-
     monkeypatch.setattr(charts, "SERIES_COLOR_COUNT", 1)
     chart = _weather_kind_chart(
         "rain", {b: {h: 10.0 + h for h in range(24)} for b in ("dry", "rainy")}, 0, build_axes(0, 40)
     )
     assert len(chart.buckets) == 2
-    assert all(1 <= b.color_index <= charts.SERIES_COLOR_COUNT for b in chart.buckets)
+    assert [b.color_index for b in chart.buckets] == [1, 1]
 
 
 def test_headline_values_follow_the_headline_hour_with_locale_decimals(monkeypatch):
-    from berlinbikes.site import charts
-
     by_bucket = {"rainy": {h: 10.0 + h / 10 for h in range(24)}, "dry": {h: 20.0 + h / 4 for h in range(24)}}
     axes = build_axes(0, 40)
     first = _weather_kind_chart("rain", by_bucket, 0, axes)
