@@ -295,7 +295,7 @@ def test_first_paragraph_is_the_shared_lead(either_page):
 
 
 def test_sources_table_carries_the_class(either_page):
-    assert either_page.count('<table class="sources-table">') == 1
+    assert either_page.count('<table class="sources-table" role="table">') == 1
 
 
 def _css_rule(css: str, selector: str) -> str:
@@ -377,3 +377,43 @@ def test_sources_table_stacks_with_data_labels_on_narrow_screens(site_dir):
     )
     assert re.search(stack_rule, block), "sources table cells are not stacked as blocks"
     assert "var(--muted)" in block
+
+
+class _RoleParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_table = False
+        self.roles: list[tuple[str, str | None]] = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "table" and "sources-table" in (attrs.get("class") or "").split():
+            self.in_table = True
+        if self.in_table:
+            self.roles.append((tag, attrs.get("role")))
+
+    def handle_endtag(self, tag):
+        if tag == "table":
+            self.in_table = False
+
+
+@pytest.mark.parametrize("page", ["methodology.html", "methodology.en.html"])
+def test_sources_table_has_explicit_aria_table_roles(site_dir, page):
+    parser = _RoleParser()
+    parser.feed((site_dir / page).read_text())
+    expected = {
+        "table": "table",
+        "thead": "rowgroup",
+        "tbody": "rowgroup",
+        "tr": "row",
+        "th": "columnheader",
+        "td": "cell",
+    }
+    seen = [r for r in parser.roles if r[0] in expected]
+    counts = {tag: sum(1 for t, _ in seen if t == tag) for tag in expected}
+    assert counts["th"] == 3
+    assert counts["td"] == 3 * len(DATA_SOURCES) > 0
+    assert counts["tr"] == 1 + len(DATA_SOURCES)
+    assert counts["table"] == counts["thead"] == counts["tbody"] == 1
+    for tag, role in seen:
+        assert role == expected[tag], (tag, role)
