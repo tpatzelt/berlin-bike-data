@@ -171,12 +171,16 @@ def svg_font_size(html: str, cls: str) -> float:
     return float(els[0]["attrs"]["font-size"])
 
 
+ROOT_BLOCK_PATTERN = re.compile(r":root\s*{([^}]*)}")
+DARK_BLOCK_PATTERN = re.compile(r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}")
+
+
 def css_raw_token_blocks(css: str) -> tuple[str, str]:
     """Return the raw (:root, dark-mode :root) block texts of site.css."""
-    root = re.search(r":root\s*{([^}]*)}", css)
-    dark = re.search(r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}", css)
-    assert root, r"no `:root { ... }` block matched pattern ':root\s*{([^}]*)}'"
-    assert dark, r"no dark block matched pattern 'prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}'"
+    root = ROOT_BLOCK_PATTERN.search(css)
+    dark = DARK_BLOCK_PATTERN.search(css)
+    assert root, f"no `:root {{ ... }}` block matched pattern {ROOT_BLOCK_PATTERN.pattern!r}"
+    assert dark, f"no dark block matched pattern {DARK_BLOCK_PATTERN.pattern!r}"
     return root.group(1), dark.group(1)
 
 
