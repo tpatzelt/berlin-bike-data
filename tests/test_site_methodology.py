@@ -255,6 +255,7 @@ class _OutlineParser(HTMLParser):
         self.headings: list[tuple[str, str, int]] = []  # tag, text, event index
         self.source_urls: list[str] = []
         self.first_p_index: int | None = None
+        self.first_p_classes: list[str] = []
         self.table_index: int | None = None
         self._events = 0
         self._open: str | None = None
@@ -266,6 +267,7 @@ class _OutlineParser(HTMLParser):
         cls = (dict(attrs).get("class") or "").split()
         if tag == "p" and self.first_p_index is None:
             self.first_p_index = self._events
+            self.first_p_classes = cls
         elif tag == "table" and "sources-table" in cls:
             self.table_index = self._events
         if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
@@ -315,7 +317,9 @@ def test_source_url_spans_hold_only_a_bare_url(site_dir, page):
 
 
 def test_first_paragraph_is_the_shared_lead(either_page):
-    assert either_page.index('<p class="lead-text">') == either_page.index("<p")
+    outline = _outline(either_page)
+    assert outline.first_p_index is not None
+    assert "lead-text" in outline.first_p_classes
 
 
 def test_sources_table_carries_the_class(either_page):
