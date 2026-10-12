@@ -297,8 +297,6 @@ def test_headline_moves_above_markers_when_a_series_label_would_overprint_it():
 
 
 def test_missing_bucket_marks_only_the_present_one():
-    from berlinbikes.site.charts import _weather_kind_chart, build_axes
-
     axes = build_axes(0, 20)
     by_bucket = {"dry": {h: 10.0 + h for h in range(24)}}
     chart = _weather_kind_chart("rain", by_bucket, 0, axes)
