@@ -319,21 +319,65 @@ def test_map_js_tick_values_come_from_the_server():
     assert "I18N.x_ticks" in js and "I18N.y_tick_target" in js and "niceTicks(" in js
 
 
+class _Controls(HTMLParser):
+    """Labels by for=, <input> attrs by id, the datalist ids and the pick-hour options."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.labels: dict[str, str] = {}
+        self.inputs: dict[str, dict] = {}
+        self.datalists: set[str] = set()
+        self.hour_options: list[tuple[str, bool]] = []
+        self.show_ortsteil = False
+        self._label: str | None = None
+        self._in_hour = False
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "label" and a.get("for"):
+            self._label = a["for"]
+            self.labels[self._label] = ""
+        elif tag == "input" and a.get("id"):
+            self.inputs[a["id"]] = a
+        elif tag == "datalist" and a.get("id"):
+            self.datalists.add(a["id"])
+        elif tag == "select":
+            self._in_hour = a.get("id") == "pick-hour"
+        elif tag == "option" and self._in_hour:
+            self.hour_options.append((a.get("value"), "selected" in a))
+        if a.get("id") == "show-ortsteil":
+            self.show_ortsteil = True
+
+    def handle_endtag(self, tag):
+        if tag == "label":
+            self._label = None
+        elif tag == "select":
+            self._in_hour = False
+
+    def handle_data(self, data):
+        if self._label:
+            self.labels[self._label] += data
+
+
 @pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
 def test_map_page_has_hour_picker_search_and_ortsteil_button(map_site, page, lang):
+    from berlinbikes.site.i18n import STRINGS, t
+
     html = (map_site / page).read_text()
-    assert '<select id="pick-hour">' in html and '<label for="pick-hour">' in html
-    assert f'<option value="{MAP_DEFAULT_HOUR}" selected>' in html
-    assert html.count('<option value="') >= 24
-    assert '<label for="pick-search">' in html
-    assert re.search(r'<input id="pick-search"[^>]*list="station-names"', html)
-    assert '<datalist id="station-names">' in html
-    label = {"de": "Station suchen", "en": "Search for a station"}[lang]
-    assert label in html
+    controls = _Controls()
+    controls.feed(html)
+    assert "pick-hour" in controls.labels and "pick-search" in controls.labels
+    assert controls.labels["pick-search"].strip() == str(t("map.label.search", lang))
+    assert len(controls.hour_options) >= 24
+    selected = [v for v, sel in controls.hour_options if sel]
+    assert selected == [str(MAP_DEFAULT_HOUR)]
+    assert "pick-search" in controls.inputs
+    assert controls.inputs["pick-search"].get("list") == "station-names"
+    assert "station-names" in controls.datalists
     i18n = json.loads(_collect(map_site / page).i18n_json)
-    assert i18n["ortsteil_button"] == {"de": "Ganzen Ortsteil zeigen", "en": "Show the whole Ortsteil"}[lang]
+    assert i18n["ortsteil_button"] == STRINGS["map.ortsteil_button"][lang]
     assert i18n["x_ticks"][0] == 0 and i18n["y_tick_target"] >= 1
-    assert 'id="show-ortsteil"' in html
+    assert controls.show_ortsteil
 
 
 @pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
