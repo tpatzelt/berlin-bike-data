@@ -40,7 +40,7 @@
 <label for="pick-search">{{ t("map.label.search") }}</label>
 <input id="pick-search" type="search" list="station-names" autocomplete="off" placeholder="{{ t("map.search.placeholder") }}">
 <datalist id="station-names">
-{% if map_default %}{% for s in map_payload.stations %}<option value="{{ s.name or s.id }}">
+{% if map_default %}{% for s in map_payload.stations %}<option value="{{ (s.name or s.id) ~ (" (" ~ s.ortsteil ~ ")" if s.ortsteil else "") }}">
 {% endfor %}{% endif %}</datalist>
 </p>
 <p>

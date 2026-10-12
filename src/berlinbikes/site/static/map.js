@@ -161,7 +161,8 @@
   }
 
   function stationLabel(station) {
-    return station.name || station.id;
+    var name = station.name || station.id;
+    return station.ortsteil ? name + " (" + station.ortsteil + ")" : name;
   }
 
   function showOrtsteilButton(station) {
@@ -177,7 +178,7 @@
     $("pick-ortsteil").value = "";
     $("pick-search").value = stationLabel(station);
     state.curve = station.curve;
-    state.title = station.name + (station.ortsteil ? " (" + station.ortsteil + ")" : "");
+    state.title = stationLabel(station);
     highlight(id);
     showOrtsteilButton(station);
     render();
@@ -218,7 +219,7 @@
   }
 
   function inRange(text, max) {
-    return /^\d+$/.test(text || "") && Number(text) <= max ? text : null;
+    return /^\d+$/.test(text || "") && Number(text) <= max ? String(Number(text)) : null;
   }
 
   // Apply the hash to the controls; anything missing or invalid falls back to the default.
