@@ -2,14 +2,13 @@
 {% block title %}{{ t("title.methodology") }}{% endblock %}
 {% block content %}
 <h1>{{ t("methodology.h1") }}</h1>
-<h2>{{ t("methodology.h2") }}</h2>
 <p class="lead-text">{{ t("methodology.p.snapshot") }}</p>
 <p>{{ t("methodology.p.bike_id") }}</p>
 <p>{{ t("methodology.p.min_days", min_full_days=min_full_days) }}</p>
 <p>{{ t("methodology.p.empty") }}</p>
 <p>{{ t("methodology.p.flow") }}</p>
 <p>{{ t("methodology.p.weather", rain_mm=rain_mm_threshold, cold_c=cold_c_threshold) }}</p>
-<h3>{{ t("methodology.h3") }}</h3>
+<h2>{{ t("methodology.h2") }}</h2>
 <table class="sources-table">
 <thead>
 <tr><th>{{ t("methodology.col.source") }}</th><th>{{ t("methodology.col.used_for") }}</th><th>{{ t("methodology.col.license") }}</th></tr>

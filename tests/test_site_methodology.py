@@ -142,9 +142,17 @@ def test_mentions_proportional_bezirk_flow_inference(either_page):
     assert "proportional" in lowered
 
 
-def test_page_has_exactly_one_h1_before_the_h2(either_page):
+def test_page_outline_is_h1_then_one_sources_h2_before_the_table(either_page):
     assert either_page.count("<h1>") == 1
-    assert either_page.index("<h1>") < either_page.index("<h2>")
+    assert either_page.count("<h2>") == 1
+    assert "<h3" not in either_page
+    h2 = either_page.index("<h2>")
+    assert either_page.index("<h1>") < h2
+    heading = either_page[h2 + len("<h2>") : either_page.index("</h2>")]
+    assert heading in {"Datenquellen", "Data sources"}
+    assert h2 < either_page.index('<table class="sources-table">')
+    # No h2 sits directly under the h1: the lead paragraph comes first.
+    assert either_page.index("<h1>") < either_page.index("<p") < h2
 
 
 def test_first_paragraph_is_the_shared_lead(either_page):
