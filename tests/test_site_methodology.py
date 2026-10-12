@@ -40,25 +40,45 @@ class _PageParser(HTMLParser):
             self.hrefs.append(attr_dict["href"])
 
 
-class _SourcesTableText(HTMLParser):
-    """Collects the text of every <td> inside the .sources-table."""
+class _SourcesTable(HTMLParser):
+    """Collects what sits inside every .sources-table, tracking table nesting depth.
+
+    Records each table's role, each element's (tag, role), and every <td>'s text and
+    data-label. A nested <table> inside the .sources-table does not end collection.
+    """
 
     def __init__(self) -> None:
         super().__init__()
+        self.tables = 0
+        self.table_roles: list[str | None] = []
+        self.roles: list[tuple[str, str | None]] = []
         self.cells: list[str] = []
-        self._in_table = False
+        self.labels: list[str | None] = []
+        self._depth = 0  # table nesting depth, counted only while inside a .sources-table
         self._in_cell = False
 
     def handle_starttag(self, tag, attrs):
-        if tag == "table" and "sources-table" in (dict(attrs).get("class") or "").split():
-            self._in_table = True
-        elif tag == "td" and self._in_table:
+        attrs = dict(attrs)
+        if self._depth == 0:
+            if tag == "table" and "sources-table" in (attrs.get("class") or "").split():
+                self._depth = 1
+                self.tables += 1
+                self.table_roles.append(attrs.get("role"))
+                self.roles.append((tag, attrs.get("role")))
+            return
+        if tag == "table":
+            self._depth += 1
+        self.roles.append((tag, attrs.get("role")))
+        if tag == "td":
             self._in_cell = True
             self.cells.append("")
+            self.labels.append(attrs.get("data-label"))
 
     def handle_endtag(self, tag):
+        if self._depth == 0:
+            return
         if tag == "table":
-            self._in_table = False
+            self._depth -= 1
         elif tag == "td":
             self._in_cell = False
 
@@ -67,10 +87,14 @@ class _SourcesTableText(HTMLParser):
             self.cells[-1] += data
 
 
-def _sources_table_text(html_text: str) -> str:
-    parser = _SourcesTableText()
+def _sources_table(html_text: str) -> _SourcesTable:
+    parser = _SourcesTable()
     parser.feed(html_text)
-    return " ".join(" ".join(parser.cells).split())
+    return parser
+
+
+def _sources_table_text(html_text: str) -> str:
+    return " ".join(" ".join(_sources_table(html_text).cells).split())
 
 
 def _parse(html_text: str) -> _PageParser:
@@ -295,7 +319,9 @@ def test_first_paragraph_is_the_shared_lead(either_page):
 
 
 def test_sources_table_carries_the_class(either_page):
-    assert either_page.count('<table class="sources-table" role="table">') == 1
+    table = _sources_table(either_page)
+    assert table.tables == 1
+    assert table.table_roles == ["table"]
 
 
 def _css_rule(css: str, selector: str) -> str:
@@ -328,29 +354,11 @@ def test_lead_text_rule_uses_type_and_space_tokens(site_dir):
     assert "line-height" in rule
 
 
-class _CellParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.in_table = False
-        self.labels: list[str | None] = []
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "table" and "sources-table" in (dict(attrs).get("class") or "").split():
-            self.in_table = True
-        elif tag == "td" and self.in_table:
-            self.labels.append(dict(attrs).get("data-label"))
-
-    def handle_endtag(self, tag):
-        if tag == "table":
-            self.in_table = False
-
-
 @pytest.mark.parametrize(
     ("page", "lang"), [("methodology.html", "de"), ("methodology.en.html", "en")]
 )
 def test_every_sources_td_has_its_column_label(site_dir, page, lang):
-    parser = _CellParser()
-    parser.feed((site_dir / page).read_text())
+    parser = _sources_table((site_dir / page).read_text())
     expected = [STRINGS[f"methodology.col.{k}"][lang] for k in ("source", "used_for", "license")]
     assert len(parser.labels) == 3 * len(DATA_SOURCES) > 0
     assert parser.labels == expected * len(DATA_SOURCES)
@@ -379,28 +387,9 @@ def test_sources_table_stacks_with_data_labels_on_narrow_screens(site_dir):
     assert "var(--muted)" in block
 
 
-class _RoleParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.in_table = False
-        self.roles: list[tuple[str, str | None]] = []
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        if tag == "table" and "sources-table" in (attrs.get("class") or "").split():
-            self.in_table = True
-        if self.in_table:
-            self.roles.append((tag, attrs.get("role")))
-
-    def handle_endtag(self, tag):
-        if tag == "table":
-            self.in_table = False
-
-
 @pytest.mark.parametrize("page", ["methodology.html", "methodology.en.html"])
 def test_sources_table_has_explicit_aria_table_roles(site_dir, page):
-    parser = _RoleParser()
-    parser.feed((site_dir / page).read_text())
+    parser = _sources_table((site_dir / page).read_text())
     expected = {
         "table": "table",
         "thead": "rowgroup",
