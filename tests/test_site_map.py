@@ -366,3 +366,12 @@ def test_english_map_strings_use_ortsteil_not_district():
     map_keys = [k for k in STRINGS if k.startswith("map.")]
     assert map_keys
     assert not [k for k in map_keys if "district" in STRINGS[k]["en"].lower()]
+
+
+def test_map_js_normalises_padded_hash_numbers_and_labels_stations_with_ortsteil():
+    assert _JS.exists()
+    js = _JS.read_text()
+    assert "? String(Number(text)) : null" in js
+    label = js.split("function stationLabel(station)")[1].split("\n  }")[0]
+    assert "station.ortsteil" in label
+    assert "list.appendChild(option(stationLabel(s)" in js
