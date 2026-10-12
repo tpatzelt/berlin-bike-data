@@ -124,7 +124,7 @@ footer a { color: var(--muted); margin-right: var(--space-4); }
 
 a { color: var(--accent); }
 
-a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, table:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .not-enough-data { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); background: var(--surface); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); }
 
@@ -180,7 +180,7 @@ th, td { padding: var(--space-1) var(--space-2); text-align: right; }
 /* Prose keeps a readable measure; figures and the map use the wider main column. */
 main :is(p, h2, h3, ul, ol, details, form) { max-width: 68ch; }
 
-main > table { display: block; overflow-x: auto; max-width: 100%; width: fit-content; }
+main > table, details > table { display: block; overflow-x: auto; max-width: 100%; width: fit-content; }
 
 .sources-table th, .sources-table td { text-align: left; vertical-align: top; hyphens: auto; overflow-wrap: break-word; }
 .sources-table thead th { border-bottom: 2px solid var(--border); }

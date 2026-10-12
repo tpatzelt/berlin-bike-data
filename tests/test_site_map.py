@@ -26,6 +26,18 @@ from tests.helpers.svg import (
 from tests.synthetic import EMPTY_STATION_ID
 
 
+class _TableFinder(HTMLParser):
+    """Records the attributes of the <table id="profile-table"> element."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.attrs: dict | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table" and dict(attrs).get("id") == "profile-table":
+            self.attrs = dict(attrs)
+
+
 @pytest.fixture(scope="module")
 def map_site(synthetic_data_dir, tmp_path_factory):
     site_dir = tmp_path_factory.mktemp("map_site")
@@ -43,7 +55,10 @@ def test_map_page_structure(map_site):
     for control in ("pick-station", "pick-ortsteil", "pick-weekday"):
         assert f'<label for="{control}">' in html
         assert f'<select id="{control}">' in html
-    assert '<table id="profile-table">' in html
+    finder = _TableFinder()
+    finder.feed(html)
+    assert finder.attrs is not None
+    assert finder.attrs.get("tabindex") == "0"
     assert "<noscript>" in html and 'href="data/profiles.json"' in html
     assert "openstreetmap.org/copyright" in html
 
