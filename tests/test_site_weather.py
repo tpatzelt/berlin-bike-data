@@ -308,6 +308,17 @@ def test_missing_bucket_marks_only_the_present_one():
     assert chart.headline_points[0].value == 18.0
 
 
+def test_weather_bucket_color_indexes_wrap_through_series_colors(monkeypatch):
+    from berlinbikes.site import charts
+
+    monkeypatch.setattr(charts, "SERIES_COLOR_COUNT", 1)
+    chart = _weather_kind_chart(
+        "rain", {b: {h: 10.0 + h for h in range(24)} for b in ("dry", "rainy")}, 0, build_axes(0, 40)
+    )
+    assert len(chart.buckets) == 2
+    assert all(1 <= b.color_index <= charts.SERIES_COLOR_COUNT for b in chart.buckets)
+
+
 def test_headline_values_follow_the_headline_hour_with_locale_decimals(monkeypatch):
     from berlinbikes.site import charts
 
