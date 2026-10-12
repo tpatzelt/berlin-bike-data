@@ -249,3 +249,44 @@ def test_lead_text_rule_uses_type_and_space_tokens(site_dir):
     assert "font-size: var(--step-" in rule
     assert "var(--space-" in rule
     assert "line-height" in rule
+
+
+class _CellParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_table = False
+        self.labels: list[str | None] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table" and "sources-table" in (dict(attrs).get("class") or "").split():
+            self.in_table = True
+        elif tag == "td" and self.in_table:
+            self.labels.append(dict(attrs).get("data-label"))
+
+    def handle_endtag(self, tag):
+        if tag == "table":
+            self.in_table = False
+
+
+@pytest.mark.parametrize(
+    ("page", "lang"), [("methodology.html", "de"), ("methodology.en.html", "en")]
+)
+def test_every_sources_td_has_its_column_label(site_dir, page, lang):
+    parser = _CellParser()
+    parser.feed((site_dir / page).read_text())
+    expected = [STRINGS[f"methodology.col.{k}"][lang] for k in ("source", "used_for", "license")]
+    assert len(parser.labels) == 3 * len(DATA_SOURCES) > 0
+    assert parser.labels == expected * len(DATA_SOURCES)
+    assert all(parser.labels)
+
+
+def test_sources_table_stacks_with_data_labels_on_narrow_screens(site_dir):
+    paths = list(site_dir.rglob("site.css"))
+    assert paths
+    css = paths[0].read_text()
+    start = css.index("@media (max-width")
+    block = css[start : css.index("\n}\n", start)]
+    assert ".sources-table td::before" in block
+    assert "content: attr(data-label)" in block
+    assert ".sources-table td" in block and "display: block" in block
+    assert "var(--muted)" in block

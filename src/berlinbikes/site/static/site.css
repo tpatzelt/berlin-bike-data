@@ -186,6 +186,16 @@ main > table { display: block; overflow-x: auto; max-width: 100%; width: fit-con
 .sources-table thead th { border-bottom: 2px solid var(--border); }
 .sources-table .source-url { overflow-wrap: anywhere; word-break: break-all; }
 
+/* Phones: each source becomes a block of labelled lines so the Lizenz column stays on screen. */
+@media (max-width: 47.99em) {
+  main > table.sources-table { overflow-x: visible; width: auto; }
+  .sources-table tbody, .sources-table tr, .sources-table td { display: block; }
+  .sources-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .sources-table tr { padding-block: var(--space-2); border-bottom: 1px solid var(--border); }
+  .sources-table td { padding: var(--space-1) 0; }
+  .sources-table td::before { content: attr(data-label); display: block; color: var(--muted); font-size: var(--step--1); }
+}
+
 .lead-text { font-size: var(--step-1); line-height: 1.5; margin-block: var(--space-4); }
 
 details { overflow-x: auto; }
