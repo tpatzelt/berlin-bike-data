@@ -314,28 +314,43 @@ def test_not_enough_data_css_has_no_border_box():
 
 
 class _DetailsTableParser(HTMLParser):
-    """Collects the tabindex and caption presence of every <table> inside a <details>."""
+    """Collects tabindex and caption presence of each outermost <table> inside a <details>."""
 
     def __init__(self) -> None:
         super().__init__()
         self._details_depth = 0
+        self._table_depth = 0
         self._current: dict | None = None
         self.tables: list[dict] = []
 
     def handle_starttag(self, tag, attrs):
         if tag == "details":
             self._details_depth += 1
-        elif tag == "table" and self._details_depth:
-            self._current = {"tabindex": dict(attrs).get("tabindex"), "caption": False}
-            self.tables.append(self._current)
-        elif tag == "caption" and self._current is not None:
+        elif tag == "table" and (self._details_depth or self._table_depth):
+            self._table_depth += 1
+            if self._table_depth == 1:
+                self._current = {"tabindex": dict(attrs).get("tabindex"), "caption": False}
+                self.tables.append(self._current)
+        elif tag == "caption" and self._table_depth == 1:
             self._current["caption"] = True
 
     def handle_endtag(self, tag):
         if tag == "details":
             self._details_depth -= 1
-        elif tag == "table":
-            self._current = None
+        elif tag == "table" and self._table_depth:
+            self._table_depth -= 1
+            if not self._table_depth:
+                self._current = None
+
+
+def test_details_table_parser_ignores_nested_tables_and_tables_outside_details():
+    parser = _DetailsTableParser()
+    parser.feed(
+        '<table tabindex="1"><caption>x</caption></table>'
+        '<details><table tabindex="0"><tr><td><table><tr><td>x</td></tr></table></td></tr>'
+        "<caption>c</caption></table></details>"
+    )
+    assert parser.tables == [{"tabindex": "0", "caption": True}]
 
 
 @pytest.mark.parametrize("page", ["index", "map"])
