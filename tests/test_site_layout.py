@@ -338,7 +338,7 @@ class _DetailsTableParser(HTMLParser):
             self._current = None
 
 
-@pytest.mark.parametrize("page", ["index"])
+@pytest.mark.parametrize("page", ["index", "map"])
 @pytest.mark.parametrize("lang", ["de", "en"])
 def test_tables_inside_details_are_focusable_named_scroll_regions(synthetic_site, page, lang):
     name = f"{page}.html" if lang == "de" else f"{page}.en.html"
