@@ -394,7 +394,10 @@ def test_map_js_normalises_padded_hash_numbers_and_labels_stations_with_ortsteil
 
 
 class _StationOptions(HTMLParser):
-    """Datalist option values and pick-station option texts."""
+    """Datalist option values, pick-station option texts, and the (value, text) of options carrying `selected`.
+
+    Option texts are stripped of surrounding whitespace in select_texts and selected alike.
+    """
 
     def __init__(self):
         super().__init__()
@@ -423,9 +426,10 @@ class _StationOptions(HTMLParser):
 
     def handle_endtag(self, tag):
         if tag == "option" and self._where == "select":
-            self.select_texts.append("".join(self._text))
+            text = "".join(self._text).strip()
+            self.select_texts.append(text)
             if self._selected_value is not None:
-                self.selected.append((self._selected_value, "".join(self._text).strip()))
+                self.selected.append((self._selected_value, text))
                 self._selected_value = None
         elif tag in ("select", "datalist"):
             self._where = None
