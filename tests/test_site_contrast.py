@@ -9,7 +9,7 @@ import pytest
 
 import berlinbikes.site as site_pkg
 from berlinbikes.site.charts import MAP_BINS, SERIES_COLOR_COUNT
-from tests.helpers.svg import blend, contrast_ratio, css_token_blocks
+from tests.helpers.svg import blend, contrast_ratio, css_raw_token_blocks, css_token_blocks
 
 SITE_DIR = Path(site_pkg.__file__).parent
 CSS = (SITE_DIR / "static" / "site.css").read_text()
@@ -71,15 +71,10 @@ def test_marker_opacity_matches_the_code():
     assert f"fillOpacity: {MARKER_OPACITY}" in (SITE_DIR / "static" / "map.js").read_text()
 
 
-@pytest.mark.parametrize("block_pattern", [
-    r":root\s*{([^}]*)}",
-    r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}",
-], ids=["light", "dark"])
-def test_series_token_count_matches_charts_constant(block_pattern):
+@pytest.mark.parametrize("block", range(2), ids=["light", "dark"])
+def test_series_token_count_matches_charts_constant(block):
     # Count in the raw block: MODES['dark'] merges the light tokens in, hiding a dropped dark token.
-    block = re.search(block_pattern, CSS)
-    assert block, block_pattern
-    declared = re.findall(r"(--series-\d+)\s*:", block.group(1))
+    declared = re.findall(r"(--series-\d+)\s*:", css_raw_token_blocks(CSS)[block])
     assert len(declared) == SERIES_COLOR_COUNT, declared
 
 

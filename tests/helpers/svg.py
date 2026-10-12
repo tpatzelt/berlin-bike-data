@@ -171,18 +171,24 @@ def svg_font_size(html: str, cls: str) -> float:
     return float(els[0]["attrs"]["font-size"])
 
 
-def css_token_blocks(css: str) -> tuple[dict[str, str], dict[str, str]]:
-    """Return the (light, dark) custom-property maps parsed from site.css."""
+def css_raw_token_blocks(css: str) -> tuple[str, str]:
+    """Return the raw (:root, dark-mode :root) block texts of site.css."""
     root = re.search(r":root\s*{([^}]*)}", css)
     dark = re.search(r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}", css)
     assert root and dark
+    return root.group(1), dark.group(1)
+
+
+def css_token_blocks(css: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Return the (light, dark) custom-property maps parsed from site.css."""
+    root_text, dark_text = css_raw_token_blocks(css)
     pat = re.compile(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})\s*;")
     color_like = re.compile(r"(--[\w-]+):\s*((?:#|rgba?\(|hsla?\()[^;]*);")
-    for block in (root.group(1), dark.group(1)):
+    for block in (root_text, dark_text):
         unparsed = {n for n, _ in color_like.findall(block)} - {n for n, _ in pat.findall(block)}
         assert not unparsed, f"colour tokens not written as 6-digit hex: {sorted(unparsed)}"
-    light_tokens = dict(pat.findall(root.group(1)))
-    dark_tokens = {**light_tokens, **dict(pat.findall(dark.group(1)))}
+    light_tokens = dict(pat.findall(root_text))
+    dark_tokens = {**light_tokens, **dict(pat.findall(dark_text))}
     return light_tokens, dark_tokens
 
 
