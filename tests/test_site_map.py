@@ -14,6 +14,7 @@ from berlinbikes.analysis.db import connect
 from berlinbikes.analysis.profiles import station_profiles
 from berlinbikes.site import build_site
 from berlinbikes.site.charts import CHART_FONT_SIZE, HEADLINE_CHAR_WIDTH, MAP_BINS, MAP_DEFAULT_HOUR, map_profile_chart
+from berlinbikes.site.i18n import STRINGS
 from berlinbikes.site.profiles import profiles_payload
 from tests.helpers.svg import (
     assert_axes_conventions,
@@ -52,9 +53,11 @@ def test_map_page_structure(map_site):
     assert 'integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="' in html
     assert 'src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"' in html
     assert 'integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="' in html
+    controls = _Controls()
+    controls.feed(html)
     for control in ("pick-station", "pick-ortsteil", "pick-weekday"):
-        assert f'<label for="{control}">' in html
-        assert f'<select id="{control}">' in html
+        assert control in controls.labels, control
+        assert control in controls.selects, control
     finder = _TableFinder()
     finder.feed(html)
     assert finder.attrs is not None
@@ -174,9 +177,15 @@ def test_map_js_has_no_inline_bilingual_strings():
     assert "map-i18n" in js
 
 
-def test_map_weekday_options_follow_page_language(map_site):
-    assert "<option value=\"0\" selected>Montag</option>" in (map_site / "map.html").read_text()
-    assert "<option value=\"6\">Sunday</option>" in (map_site / "map.en.html").read_text()
+@pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
+def test_map_weekday_options_follow_page_language(map_site, page, lang):
+    controls = _Controls()
+    controls.feed((map_site / page).read_text())
+    options = controls.weekday_options
+    assert [value for value, _, _ in options] == [str(i) for i in range(7)]
+    assert [value for value, sel, _ in options if sel] == ["0"]
+    assert [text for _, _, text in options] == [STRINGS[f"map.weekday.{i}"][lang] for i in range(7)]
+    assert controls.labels["pick-weekday"].strip() == STRINGS["map.label.weekday"][lang]
 
 
 def test_legal_pages_are_one_language_each_with_operator_block(map_site):
@@ -328,9 +337,12 @@ class _Controls(HTMLParser):
         self.inputs: dict[str, dict] = {}
         self.datalists: set[str] = set()
         self.hour_options: list[tuple[str, bool]] = []
+        self.weekday_options: list[tuple[str, bool, str]] = []
+        self.selects: set[str] = set()
         self.show_ortsteil = False
         self._label: str | None = None
-        self._in_hour = False
+        self._select: str | None = None
+        self._in_weekday_option = False
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -342,9 +354,13 @@ class _Controls(HTMLParser):
         elif tag == "datalist" and a.get("id"):
             self.datalists.add(a["id"])
         elif tag == "select":
-            self._in_hour = a.get("id") == "pick-hour"
-        elif tag == "option" and self._in_hour:
+            self._select = a.get("id")
+            self.selects.add(self._select)
+        elif tag == "option" and self._select == "pick-hour":
             self.hour_options.append((a.get("value"), "selected" in a))
+        elif tag == "option" and self._select == "pick-weekday":
+            self.weekday_options.append((a.get("value"), "selected" in a, ""))
+            self._in_weekday_option = True
         if a.get("id") == "show-ortsteil":
             self.show_ortsteil = True
 
@@ -352,22 +368,26 @@ class _Controls(HTMLParser):
         if tag == "label":
             self._label = None
         elif tag == "select":
-            self._in_hour = False
+            self._select = None
+        elif tag == "option":
+            self._in_weekday_option = False
 
     def handle_data(self, data):
         if self._label:
             self.labels[self._label] += data
+        if self._in_weekday_option:
+            value, sel, text = self.weekday_options[-1]
+            self.weekday_options[-1] = (value, sel, text + data)
 
 
 @pytest.mark.parametrize("page,lang", [("map.html", "de"), ("map.en.html", "en")])
 def test_map_page_has_hour_picker_search_and_ortsteil_button(map_site, page, lang):
-    from berlinbikes.site.i18n import STRINGS, t
-
     html = (map_site / page).read_text()
     controls = _Controls()
     controls.feed(html)
     assert "pick-hour" in controls.labels and "pick-search" in controls.labels
-    assert controls.labels["pick-search"].strip() == str(t("map.label.search", lang))
+    assert controls.labels["pick-search"].strip() == STRINGS["map.label.search"][lang]
+    assert controls.labels["pick-hour"].strip() == STRINGS["map.label.hour"][lang]
     assert len(controls.hour_options) >= 24
     selected = [v for v, sel in controls.hour_options if sel]
     assert selected == [str(MAP_DEFAULT_HOUR)]
@@ -420,8 +440,6 @@ def test_avail_tokens_exist_in_both_themes_and_have_contrast(map_site):
 
 
 def test_english_map_strings_use_ortsteil_not_district():
-    from berlinbikes.site.i18n import STRINGS
-
     map_keys = [k for k in STRINGS if k.startswith("map.")]
     assert map_keys
     assert not [k for k in map_keys if "district" in STRINGS[k]["en"].lower()]
