@@ -145,7 +145,7 @@ a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible
 
 figure { margin: var(--space-4) 0; }
 
-svg.chart { display: block; width: 100%; height: auto; }
+svg.chart { display: block; width: 100%; max-width: 40rem; height: auto; }
 
 .chart-legend { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-3); padding: 0; }
 

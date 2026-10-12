@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from datetime import date
 
 import pytest
@@ -147,3 +148,14 @@ def test_every_server_rendered_chart_meets_the_g2_conventions(site, name):
     assert len(figures) == n, (len(figures), n)
     assert all(tag == "<details" for tag in figures), figures
     assert main.count("<details") >= n
+
+
+def test_chart_svg_width_is_capped_so_text_stays_near_body_size():
+    css = (Path(charts.__file__).parent / "static" / "site.css").read_text()
+    rule = re.search(r"(?m)^svg\.chart\s*\{([^}]*)\}", css)
+    assert rule, "svg.chart rule missing"
+    max_width = re.search(r"max-width:\s*([\d.]+)rem", rule.group(1))
+    assert max_width, "svg.chart needs a rem max-width"
+    assert re.search(r"width:\s*100%", rule.group(1))
+    rendered_font = CHART_FONT_SIZE * float(max_width.group(1)) * 16 / VIEW_WIDTH
+    assert rendered_font <= 24
