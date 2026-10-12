@@ -8,6 +8,7 @@ from html.parser import HTMLParser
 import pytest
 
 from berlinbikes.site import PAGES, build_site
+from berlinbikes.site.builder import page_url
 from berlinbikes.site.i18n import STRINGS, t
 
 
@@ -82,7 +83,7 @@ def test_hreflang_alternates_and_switch(site, page, lang):
 
 
 class _Title(HTMLParser):
-    """Collect the text of every ``<title>`` element."""
+    """Collect the text of every ``<title>``, so len == 1 also catches a duplicate."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -105,10 +106,9 @@ class _Title(HTMLParser):
 
 @pytest.mark.parametrize("page", PAGES)
 @pytest.mark.parametrize("lang", ("de", "en"))
-def test_titles_come_from_catalog(site, page, lang):
-    out, _ = site
+def test_titles_come_from_catalog(built_empty_site, page, lang):
     parser = _Title()
-    parser.feed((out / (page if lang == "de" else _en(page))).read_text())
+    parser.feed((built_empty_site / page_url(page, lang)).read_text())
     assert len(parser.titles) == 1
     expected = STRINGS[f"title.{page.removesuffix('.html')}"][lang]
     assert parser.titles[0].strip() == expected
