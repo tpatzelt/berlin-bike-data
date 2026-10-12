@@ -311,3 +311,60 @@ def test_not_enough_data_css_has_no_border_box():
     rule = re.search(r"\.not-enough-data \{([^}]*)\}", css)
     assert rule and "border:" not in rule.group(1)
     assert re.search(r"\.not-enough-data progress \{[^}]*\}", css)
+
+
+class _DetailsTableParser(HTMLParser):
+    """Collects the tabindex and caption presence of every <table> inside a <details>."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._details_depth = 0
+        self._current: dict | None = None
+        self.tables: list[dict] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "details":
+            self._details_depth += 1
+        elif tag == "table" and self._details_depth:
+            self._current = {"tabindex": dict(attrs).get("tabindex"), "caption": False}
+            self.tables.append(self._current)
+        elif tag == "caption" and self._current is not None:
+            self._current["caption"] = True
+
+    def handle_endtag(self, tag):
+        if tag == "details":
+            self._details_depth -= 1
+        elif tag == "table":
+            self._current = None
+
+
+@pytest.mark.parametrize("page", ["index"])
+@pytest.mark.parametrize("lang", ["de", "en"])
+def test_tables_inside_details_are_focusable_named_scroll_regions(synthetic_site, page, lang):
+    name = f"{page}.html" if lang == "de" else f"{page}.en.html"
+    path = synthetic_site / name
+    assert path.exists(), name
+    parser = _DetailsTableParser()
+    parser.feed(path.read_text())
+    assert parser.tables, name
+    for table in parser.tables:
+        assert table["tabindex"] == "0", name
+        assert table["caption"], name
+
+
+def test_css_scrolls_and_focus_outlines_tables_inside_details(empty_site):
+    css = _site_css(empty_site)
+    rule = next(
+        (m for m in re.finditer(r"([^{}]+)\{([^}]*)\}", _strip_media_blocks(css))
+         if "details > table" in [s.strip() for s in m.group(1).split(",")]),
+        None,
+    )
+    assert rule is not None
+    assert re.search(r"overflow-x\s*:\s*auto", rule.group(2))
+    focus = next(
+        (m for m in re.finditer(r"([^{}]+)\{([^}]*)\}", css)
+         if "table:focus-visible" in [s.strip() for s in m.group(1).split(",")]),
+        None,
+    )
+    assert focus is not None
+    assert "outline" in focus.group(2)
