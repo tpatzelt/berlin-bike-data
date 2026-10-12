@@ -805,7 +805,7 @@ def _weather_kind_chart(kind: str, by_bucket: dict[str, dict[int, float]], exclu
                 bucket=bucket,
                 label_de=label_de,
                 label_en=label_en,
-                color_index=index + 1,
+                color_index=(index % SERIES_COLOR_COUNT) + 1,
                 points=" ".join(points_parts),
                 hours=hours,
                 dasharray=WEATHER_ACTIVE_DASHARRAY if bucket == active_bucket else "none",
