@@ -161,8 +161,7 @@
   }
 
   function stationLabel(station) {
-    var name = station.name || station.id;
-    return station.ortsteil ? name + " (" + station.ortsteil + ")" : name;
+    return station.label;
   }
 
   function showOrtsteilButton(station) {

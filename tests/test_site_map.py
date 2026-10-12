@@ -373,7 +373,8 @@ def test_map_js_normalises_padded_hash_numbers_and_labels_stations_with_ortsteil
     js = _JS.read_text()
     assert "? String(Number(text)) : null" in js
     label = js.split("function stationLabel(station)")[1].split("\n  }")[0]
-    assert "station.ortsteil" in label
+    assert re.search(r"return\s+station\.label\s*;", label)
+    assert "station.ortsteil" not in label
     assert "list.appendChild(option(stationLabel(s)" in js
 
 
@@ -425,4 +426,21 @@ def test_station_select_and_search_list_show_name_and_ortsteil(map_site, synthet
 
 def test_map_js_passes_station_label_to_the_pick_station_select():
     assert _JS.exists()
-    assert 'fillSelect($("pick-station"), data.stations.map(function (s) { return option(s.id, stationLabel(s)); }))' in _JS.read_text()
+    assert re.search(
+        r'fillSelect\(\$\("pick-station"\),\s*data\.stations\.map\(function \(s\) \{\s*return option\(s\.id,\s*stationLabel\(s\)\);',
+        _JS.read_text(),
+    )
+
+
+@pytest.mark.parametrize("page", ["map.html", "map.en.html"])
+def test_profiles_json_labels_are_what_the_map_page_options_show(map_site, page):
+    payload = json.loads((map_site / "data" / "profiles.json").read_text())
+    expected = [
+        (s["name"] or s["id"]) + (f" ({s['ortsteil']})" if s["ortsteil"] else "") for s in payload["stations"]
+    ]
+    assert expected and any("(" in label for label in expected)
+    assert [s["label"] for s in payload["stations"]] == expected
+    parsed = _StationOptions()
+    parsed.feed((map_site / page).read_text())
+    assert parsed.datalist == expected
+    assert parsed.select_texts[1:] == expected
