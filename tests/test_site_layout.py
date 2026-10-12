@@ -343,11 +343,26 @@ class _DetailsTableParser(HTMLParser):
                 self._current = None
 
 
-def test_details_table_parser_ignores_nested_tables_and_tables_outside_details():
+def test_details_table_parser_ignores_a_table_outside_details():
+    parser = _DetailsTableParser()
+    parser.feed('<table tabindex="1"><caption>x</caption></table>')
+    assert parser.tables == []
+
+
+def test_details_table_parser_nested_table_adds_no_second_entry():
     parser = _DetailsTableParser()
     parser.feed(
-        '<table tabindex="1"><caption>x</caption></table>'
-        '<details><table tabindex="0"><tr><td><table><tr><td>x</td></tr></table></td></tr>'
+        '<details><table tabindex="0"><tr><td>'
+        "<table><tr><td>x</td></tr></table></td></tr></table></details>"
+    )
+    assert parser.tables == [{"tabindex": "0", "caption": False}]
+
+
+def test_details_table_parser_credits_caption_after_nested_table():
+    parser = _DetailsTableParser()
+    parser.feed(
+        '<details><table tabindex="0"><tr><td>'
+        "<table><tr><td>x</td></tr></table></td></tr>"
         "<caption>c</caption></table></details>"
     )
     assert parser.tables == [{"tabindex": "0", "caption": True}]

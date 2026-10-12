@@ -333,7 +333,8 @@ def test_sources_table_collector_survives_a_nested_table():
     )
     assert table.tables == 1
     assert table.table_roles == ["table"]
-    assert "after" in table.cells
+    # The outer <td> holds only the nested table, so its own cell text is empty.
+    assert table.cells == ["", "inner", "after"]
     assert "outside" not in table.cells
 
 
