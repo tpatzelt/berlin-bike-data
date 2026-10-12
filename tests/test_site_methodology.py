@@ -324,6 +324,19 @@ def test_sources_table_carries_the_class(either_page):
     assert table.table_roles == ["table"]
 
 
+def test_sources_table_collector_survives_a_nested_table():
+    table = _sources_table(
+        '<table class="sources-table" role="table"><tr>'
+        "<td><table><tr><td>inner</td></tr></table></td>"
+        "<td>after</td></tr></table>"
+        "<table><tr><td>outside</td></tr></table>"
+    )
+    assert table.tables == 1
+    assert table.table_roles == ["table"]
+    assert "after" in table.cells
+    assert "outside" not in table.cells
+
+
 def _css_rule(css: str, selector: str) -> str:
     start = css.index(selector)
     return css[start : css.index("}", start)]
