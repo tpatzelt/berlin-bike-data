@@ -370,7 +370,7 @@ def test_not_enough_data_css_has_no_border_box():
 
 
 class _DetailsTableParser(HTMLParser):
-    """Collects tabindex and caption presence of each outermost <table> inside a <details>."""
+    """Collects tabindex, role and caption presence of each outermost <table> inside a <details>."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -385,7 +385,11 @@ class _DetailsTableParser(HTMLParser):
         elif tag == "table" and (self._details_depth or self._table_depth):
             self._table_depth += 1
             if self._table_depth == 1:
-                self._current = {"tabindex": dict(attrs).get("tabindex"), "caption": False}
+                self._current = {
+                    "tabindex": dict(attrs).get("tabindex"),
+                    "role": dict(attrs).get("role"),
+                    "caption": False,
+                }
                 self.tables.append(self._current)
         elif tag == "caption" and self._table_depth == 1:
             self._current["caption"] = True
@@ -408,20 +412,20 @@ def test_details_table_parser_ignores_a_table_outside_details():
 def test_details_table_parser_nested_table_adds_no_second_entry():
     parser = _DetailsTableParser()
     parser.feed(
-        '<details><table tabindex="0"><tr><td>'
+        '<details><table tabindex="0" role="table"><tr><td>'
         "<table><tr><td>x</td></tr></table></td></tr></table></details>"
     )
-    assert parser.tables == [{"tabindex": "0", "caption": False}]
+    assert parser.tables == [{"tabindex": "0", "role": "table", "caption": False}]
 
 
 def test_details_table_parser_credits_caption_after_nested_table():
     parser = _DetailsTableParser()
     parser.feed(
-        '<details><table tabindex="0"><tr><td>'
+        '<details><table tabindex="0" role="table"><tr><td>'
         "<table><tr><td>x</td></tr></table></td></tr>"
         "<caption>c</caption></table></details>"
     )
-    assert parser.tables == [{"tabindex": "0", "caption": True}]
+    assert parser.tables == [{"tabindex": "0", "role": "table", "caption": True}]
 
 
 @pytest.mark.parametrize("page", ["index", "map"])
@@ -435,6 +439,7 @@ def test_tables_inside_details_are_focusable_named_scroll_regions(synthetic_site
     assert parser.tables, name
     for table in parser.tables:
         assert table["tabindex"] == "0", name
+        assert table["role"] == "table", name
         assert table["caption"], name
 
 
