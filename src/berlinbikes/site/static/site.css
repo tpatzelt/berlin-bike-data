@@ -194,6 +194,9 @@ header, main, footer { max-width: 64rem; margin-inline: auto; }
 
 .map { height: 55vh; min-height: 16rem; width: 100%; margin: var(--space-4) 0; border: 1px solid var(--border); }
 
+/* Leaflet's .leaflet-touch .leaflet-bar a (0,2,1) loads after this file; .map.leaflet-container raises ours to (0,3,1). */
+.map.leaflet-container .leaflet-bar a { width: 2.75rem; height: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; line-height: 2.75rem; }
+
 .map-controls { display: flex; flex-wrap: wrap; gap: 0 var(--space-5); }
 
 .map-controls label { display: block; font-weight: 600; }

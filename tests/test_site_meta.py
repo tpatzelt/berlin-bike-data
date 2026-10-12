@@ -133,6 +133,18 @@ def test_touch_targets_44px():
         assert m and float(m.group(1)) >= 2.75, part
 
 
+def test_leaflet_zoom_buttons_44px():
+    css = (STATIC / "site.css").read_text()
+    rules = [m for m in re.finditer(r"(?m)^([^{}\n]+)\{([^}]*)\}", css) if ".leaflet-bar a" in m.group(1)]
+    assert rules, "no site.css rule for .leaflet-bar a"
+    sel, body = rules[0].group(1), rules[0].group(2)
+    # must beat Leaflet's `.leaflet-touch .leaflet-bar a` (two classes, one element)
+    assert sel.count(".") >= 3, sel
+    for prop in ("width", "height", "min-width", "min-height", "line-height"):
+        m = re.search(rf"(?<![\w-]){prop}:\s*([\d.]+)rem", body)
+        assert m and float(m.group(1)) >= 2.75, prop
+
+
 def _rule_body_containing(css: str, part: str) -> str:
     for m in re.finditer(r"(?m)^([^{}\n]+)\{([^}]*)\}", css):
         if part in m.group(1) and "min-height" in m.group(2):
