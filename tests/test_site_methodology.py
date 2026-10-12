@@ -9,6 +9,7 @@ approach, the rotating-id limitation and the documented thresholds.
 
 from __future__ import annotations
 
+import re
 from html.parser import HTMLParser
 
 import pytest
@@ -65,24 +66,25 @@ def either_page(request, site_dir) -> str:
 
 def test_every_data_source_name_and_license_is_named(methodology_html, methodology_en_html):
     for source in DATA_SOURCES:
-        assert source.name in methodology_html and source.name in methodology_en_html
+        assert source.name in methodology_html, source.name
+        assert source.name in methodology_en_html, source.name
         assert source.license_de in methodology_html, source.license_de
         assert source.license_en in methodology_en_html, source.license_en
 
 
 def test_license_and_url_note_are_in_the_page_language(methodology_html, methodology_en_html):
     for source in DATA_SOURCES:
-        assert source.license_de and source.license_en
+        assert source.license_de and source.license_en, source.name
         if source.license_de != source.license_en:
             assert source.license_en not in methodology_html, source.license_en
             assert source.license_de not in methodology_en_html, source.license_de
         if source.url_note_de or source.url_note_en:
-            assert source.url_note_de and source.url_note_en
-            assert source.url_note_de in methodology_html
-            assert source.url_note_en in methodology_en_html
+            assert source.url_note_de and source.url_note_en, source.name
+            assert source.url_note_de in methodology_html, source.name
+            assert source.url_note_en in methodology_en_html, source.name
             if source.url_note_de != source.url_note_en:
-                assert source.url_note_en not in methodology_html
-                assert source.url_note_de not in methodology_en_html
+                assert source.url_note_en not in methodology_html, source.name
+                assert source.url_note_de not in methodology_en_html, source.name
     assert any(s.url_note_de for s in DATA_SOURCES)
     assert any(s.license_de != s.license_en for s in DATA_SOURCES)
 
@@ -166,14 +168,14 @@ class _OutlineParser(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__()
-        self.headings: list[tuple[str, str]] = []
+        self.headings: list[tuple[str, str, int]] = []  # tag, text, event index
         self.source_urls: list[str] = []
         self.first_p_index: int | None = None
         self.table_index: int | None = None
         self._events = 0
         self._open: str | None = None
         self._buf = ""
-        self.h2_index: int | None = None
+        self._open_index = 0
 
     def handle_starttag(self, tag, attrs):
         self._events += 1
@@ -183,9 +185,7 @@ class _OutlineParser(HTMLParser):
         elif tag == "table" and "sources-table" in cls:
             self.table_index = self._events
         if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
-            self._open, self._buf = tag, ""
-            if tag == "h2":
-                self.h2_index = self._events
+            self._open, self._buf, self._open_index = tag, "", self._events
         elif tag == "span" and "source-url" in cls:
             self._open, self._buf = "span", ""
 
@@ -198,7 +198,7 @@ class _OutlineParser(HTMLParser):
             if tag == "span":
                 self.source_urls.append(self._buf)
             else:
-                self.headings.append((tag, self._buf))
+                self.headings.append((tag, self._buf, self._open_index))
             self._open = None
 
 
@@ -213,13 +213,12 @@ def _outline(html_text: str) -> _OutlineParser:
 )
 def test_page_outline_is_h1_then_one_sources_h2_before_the_table(site_dir, page, lang):
     outline = _outline((site_dir / page).read_text())
-    assert [tag for tag, _ in outline.headings] == ["h1", "h2"]
-    assert outline.headings[1][1] == STRINGS["methodology.h2"][lang]
-    assert outline.table_index is not None and outline.h2_index is not None
-    assert outline.h2_index < outline.table_index
-    # No h2 sits directly under the h1: the lead paragraph comes first.
-    assert outline.first_p_index is not None
-    assert outline.first_p_index < outline.h2_index
+    assert [tag for tag, _, _ in outline.headings] == ["h1", "h2"]
+    (_, _, h1_index), (_, h2_text, h2_index) = outline.headings
+    assert h2_text == STRINGS["methodology.h2"][lang]
+    # The lead paragraph comes between the h1 and the h2, and the table follows the h2.
+    assert outline.first_p_index is not None and outline.table_index is not None
+    assert h1_index < outline.first_p_index < h2_index < outline.table_index
 
 
 @pytest.mark.parametrize("page", ["methodology.html", "methodology.en.html"])
@@ -302,9 +301,17 @@ def test_sources_table_stacks_with_data_labels_on_narrow_screens(site_dir):
     paths = list(site_dir.rglob("site.css"))
     assert paths
     css = paths[0].read_text()
-    start = css.index("@media (max-width")
-    block = css[start : css.index("\n}\n", start)]
-    assert ".sources-table td::before" in block
+    blocks = [
+        css[m.start() : css.index("\n}\n", m.start())] for m in re.finditer("@media", css)
+    ]
+    matching = [b for b in blocks if ".sources-table td::before" in b]
+    assert len(matching) == 1, "no @media block styles .sources-table td::before"
+    block = matching[0]
+    assert "@media (max-width" in block.splitlines()[0]
     assert "content: attr(data-label)" in block
-    assert ".sources-table td" in block and "display: block" in block
+    stack_rule = (
+        r"\.sources-table tbody,\s*\.sources-table tr,\s*\.sources-table td\s*"
+        r"\{\s*display:\s*block;\s*\}"
+    )
+    assert re.search(stack_rule, block), "sources table cells are not stacked as blocks"
     assert "var(--muted)" in block
