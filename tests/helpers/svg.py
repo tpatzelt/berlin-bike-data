@@ -175,7 +175,8 @@ def css_raw_token_blocks(css: str) -> tuple[str, str]:
     """Return the raw (:root, dark-mode :root) block texts of site.css."""
     root = re.search(r":root\s*{([^}]*)}", css)
     dark = re.search(r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}", css)
-    assert root and dark
+    assert root, r"no `:root { ... }` block matched pattern ':root\s*{([^}]*)}'"
+    assert dark, r"no dark block matched pattern 'prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}'"
     return root.group(1), dark.group(1)
 
 
