@@ -253,10 +253,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Methodology: how the numbers are made",
     },
     "methodology.h2": {
-        "de": "Methodik",
-        "en": "Methodology",
-    },
-    "methodology.h3": {
         "de": "Datenquellen",
         "en": "Data sources",
     },
