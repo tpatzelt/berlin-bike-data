@@ -23,13 +23,12 @@ GRAPHIC_ON_BG = ["--fg", *[f"--series-{i}" for i in range(1, SERIES_COLOR_COUNT 
 
 
 def _used_tokens() -> set[str]:
-    used: set[str] = set()
+    used: set[str] = set(re.findall(r"^\s*(--(?:series|avail)-\d+):", CSS, re.M))
     for path in [*SITE_DIR.glob("templates/*.html"), *SITE_DIR.glob("static/*.js"), SITE_DIR / "charts.py"]:
-        used |= set(re.findall(r"var\((--(?:series|avail)-\d+)\)", path.read_text()))
-    used |= set(re.findall(r"^\s*(--(?:series|avail)-\d+):", CSS, re.M))
-    for path in [*SITE_DIR.glob("templates/*.html"), *SITE_DIR.glob("static/*.js"), SITE_DIR / "charts.py"]:
+        text = path.read_text()
+        used |= set(re.findall(r"var\((--(?:series|avail)-\d+)\)", text))
         # Dynamically built names (var(--series-{{ i }}), "var(--avail-" + i) use the whole family.
-        families = set(re.findall(r"--(series|avail)-(?!\d)", path.read_text()))
+        families = set(re.findall(r"--(series|avail)-(?!\d)", text))
         if "series" in families:
             used |= {f"--series-{i}" for i in range(1, SERIES_COLOR_COUNT + 1)}
         if "avail" in families:
@@ -72,10 +71,16 @@ def test_marker_opacity_matches_the_code():
     assert f"fillOpacity: {MARKER_OPACITY}" in (SITE_DIR / "static" / "map.js").read_text()
 
 
-@pytest.mark.parametrize("mode", MODES)
-def test_series_token_count_matches_charts_constant(mode):
-    found = [k for k in MODES[mode] if re.fullmatch(r"--series-\d+", k)]
-    assert len(found) == SERIES_COLOR_COUNT, (mode, found)
+@pytest.mark.parametrize("block_pattern", [
+    r":root\s*{([^}]*)}",
+    r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}",
+], ids=["light", "dark"])
+def test_series_token_count_matches_charts_constant(block_pattern):
+    # Count in the raw block: MODES['dark'] merges the light tokens in, hiding a dropped dark token.
+    block = re.search(block_pattern, CSS)
+    assert block, block_pattern
+    declared = re.findall(r"(--series-\d+)\s*:", block.group(1))
+    assert len(declared) == SERIES_COLOR_COUNT, declared
 
 
 @pytest.mark.parametrize("css", [
