@@ -70,6 +70,9 @@ VIEW_HEIGHT = 240
 #: ``CHART_FONT_SIZE * 328 / VIEW_WIDTH`` px, which must stay >= 11.
 CHART_FONT_SIZE = 16.5
 
+#: Number of ``--series-N`` colour tokens in site.css; series colours cycle through them.
+SERIES_COLOR_COUNT = 7
+
 #: One stroke-dasharray per weekday (Monday solid), so the lines differ by more than color.
 WEEKDAY_DASHARRAYS = ("none", "7 4", "2 3", "9 3 2 3", "12 5", "3 2 1 2", "1 4")
 
@@ -374,7 +377,7 @@ def bezirk_availability_chart(data_dir: str | Path) -> BezirkAvailabilityChart:
         bezirke.append(
             BezirkSeries(
                 index=index,
-                color_index=(index % 7) + 1,
+                color_index=(index % SERIES_COLOR_COUNT) + 1,
                 name=name,
                 points=" ".join(points_parts),
                 hours=hours,
@@ -469,7 +472,7 @@ def flow_chart(data_dir: str | Path) -> FlowChart:
         bezirke.append(
             FlowSeries(
                 index=index,
-                color_index=(index % 7) + 1,
+                color_index=(index % SERIES_COLOR_COUNT) + 1,
                 name=name,
                 points=points,
                 hours=hours,

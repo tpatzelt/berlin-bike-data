@@ -177,6 +177,10 @@ def css_token_blocks(css: str) -> tuple[dict[str, str], dict[str, str]]:
     dark = re.search(r"prefers-color-scheme:\s*dark\)\s*{\s*:root\s*{([^}]*)}", css)
     assert root and dark
     pat = re.compile(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})\s*;")
+    color_like = re.compile(r"(--[\w-]+):\s*((?:#|rgba?\(|hsla?\()[^;]*);")
+    for block in (root.group(1), dark.group(1)):
+        unparsed = {n for n, _ in color_like.findall(block)} - {n for n, _ in pat.findall(block)}
+        assert not unparsed, f"colour tokens not written as 6-digit hex: {sorted(unparsed)}"
     light_tokens = dict(pat.findall(root.group(1)))
     dark_tokens = {**light_tokens, **dict(pat.findall(dark.group(1)))}
     return light_tokens, dark_tokens
