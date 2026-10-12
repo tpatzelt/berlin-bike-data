@@ -17,6 +17,8 @@ class DataSource:
     license: str
     used_for_en: str
     used_for_de: str
+    # Prose shown beside the bare URL, outside the break-anywhere URL span.
+    url_note: str = ""
 
 
 DATA_SOURCES: tuple[DataSource, ...] = (
@@ -49,14 +51,15 @@ DATA_SOURCES: tuple[DataSource, ...] = (
     ),
     DataSource(
         name="Berlin Bezirk/Ortsteil polygons",
-        url="https://gdi.berlin.de/services/wfs/alkis_ortsteile (Geoportal Berlin, ALKIS Bezirke and Ortsteile)",
+        url="https://gdi.berlin.de/services/wfs/alkis_ortsteile",
+        url_note="Geoportal Berlin, ALKIS Bezirke and Ortsteile",
         license="Datenlizenz Deutschland - Zero - Version 2.0 (dl-de/zero-2-0)",
         used_for_en="mapping stations and grid cells to Bezirk and Ortsteil (G2)",
         used_for_de="Zuordnung von Stationen und Rasterzellen zu Bezirk und Ortsteil (G2)",
     ),
     DataSource(
         name="toddwschneider/nyc-citibike-data",
-        url="GitHub: toddwschneider/nyc-citibike-data",
+        url="https://github.com/toddwschneider/nyc-citibike-data",
         license="MIT",
         used_for_en="the upstream project this repository is forked from and adapts to Berlin",
         used_for_de="das Upstream-Projekt, von dem dieses Repository abgespalten ist und das es an Berlin anpasst",
