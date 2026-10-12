@@ -40,6 +40,39 @@ class _PageParser(HTMLParser):
             self.hrefs.append(attr_dict["href"])
 
 
+class _SourcesTableText(HTMLParser):
+    """Collects the text of every <td> inside the .sources-table."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.cells: list[str] = []
+        self._in_table = False
+        self._in_cell = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table" and "sources-table" in (dict(attrs).get("class") or "").split():
+            self._in_table = True
+        elif tag == "td" and self._in_table:
+            self._in_cell = True
+            self.cells.append("")
+
+    def handle_endtag(self, tag):
+        if tag == "table":
+            self._in_table = False
+        elif tag == "td":
+            self._in_cell = False
+
+    def handle_data(self, data):
+        if self._in_cell:
+            self.cells[-1] += data
+
+
+def _sources_table_text(html_text: str) -> str:
+    parser = _SourcesTableText()
+    parser.feed(html_text)
+    return " ".join(" ".join(parser.cells).split())
+
+
 def _parse(html_text: str) -> _PageParser:
     parser = _PageParser()
     parser.feed(html_text)
@@ -101,24 +134,27 @@ def test_used_for_column_is_in_the_page_language(methodology_html, methodology_e
 
 def test_every_de_en_field_pair_shows_only_its_own_language(methodology_html, methodology_en_html):
     names = {f.name for f in dataclasses.fields(DataSource)}
-    de = {n[:-3] for n in names if n.endswith("_de")}
-    en = {n[:-3] for n in names if n.endswith("_en")}
+    de = {n.removesuffix("_de") for n in names if n.endswith("_de")}
+    en = {n.removesuffix("_en") for n in names if n.endswith("_en")}
     assert de == en, f"unpaired _de/_en fields: {sorted(de ^ en)}"
     assert {"license", "used_for", "url_note"} <= de
-    page_de, page_en = html.unescape(methodology_html), html.unescape(methodology_en_html)
+    table_de = _sources_table_text(methodology_html)
+    table_en = _sources_table_text(methodology_en_html)
+    assert table_de and table_en, "no text collected from the .sources-table"
     for source in DATA_SOURCES:
+        assert source.name in table_de and source.name in table_en, source.name
         for field in sorted(de):
             msg = f"{source.name}.{field}"
-            value_de = getattr(source, f"{field}_de")
-            value_en = getattr(source, f"{field}_en")
+            value_de = " ".join(getattr(source, f"{field}_de").split())
+            value_en = " ".join(getattr(source, f"{field}_en").split())
             assert bool(value_de) == bool(value_en), msg
             if not value_de:
                 continue
-            assert value_de in page_de, msg
-            assert value_en in page_en, msg
+            assert value_de in table_de, msg
+            assert value_en in table_en, msg
             if value_de != value_en:
-                assert value_en not in page_de, msg
-                assert value_de not in page_en, msg
+                assert value_en not in table_de, msg
+                assert value_de not in table_en, msg
 
 
 def test_pages_are_single_language(methodology_html, methodology_en_html):
@@ -329,7 +365,9 @@ def test_sources_table_stacks_with_data_labels_on_narrow_screens(site_dir):
         css[m.start() : css.index("\n}\n", m.start())] for m in re.finditer("@media", css)
     ]
     matching = [b for b in blocks if ".sources-table td::before" in b]
-    assert len(matching) == 1, "no @media block styles .sources-table td::before"
+    assert len(matching) == 1, (
+        f"expected one @media block styling .sources-table td::before, found {len(matching)}"
+    )
     block = matching[0]
     assert "@media (max-width" in block.splitlines()[0]
     assert "content: attr(data-label)" in block
