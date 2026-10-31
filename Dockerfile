@@ -4,7 +4,7 @@
 FROM ghcr.io/astral-sh/uv:0.12.23 AS uv
 
 # Matches .python-version.
-FROM python:3.14.7-slim-bookworm
+FROM python:3.14.10-slim-bookworm
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 
